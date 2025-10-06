@@ -31,7 +31,7 @@ export const en = {
     'Batches': 'Batches',
     'Calendar': 'Calendar',
     'Recipes': 'Recipes',
-    'Warehouse': 'Warehouse',
+    'Raw Materials Warehouse': 'Raw Materials Warehouse',
     'Finished Goods Warehouse': 'Finished Goods Warehouse',
     'Item Master Data': 'Item Master Data',
     'Suppliers': 'Suppliers',

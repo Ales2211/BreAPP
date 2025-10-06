@@ -32,7 +32,7 @@ export const itLocale = {
     'Batches': 'Lotti',
     'Calendar': 'Calendario',
     'Recipes': 'Ricette',
-    'Warehouse': 'Magazzino',
+    'Raw Materials Warehouse': 'Magazzino Materie Prime',
     'Finished Goods Warehouse': 'Magazzino Prodotti Finiti',
     'Item Master Data': 'Anagrafica Articoli',
     'Suppliers': 'Fornitori',

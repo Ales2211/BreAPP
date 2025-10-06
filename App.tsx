@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import BatchesListPage from './pages/BatchesListPage';
@@ -48,6 +48,48 @@ const App: React.FC = () => {
     const [categories, setCategories] = usePersistentState<Category[]>('brewflow_categories', mockCategories);
     const [customers, setCustomers] = usePersistentState<Customer[]>('brewflow_customers', mockCustomers);
     const [orders, setOrders] = usePersistentState<Order[]>('brewflow_orders', mockOrders);
+
+    const {
+        rawMaterialMasterItems,
+        rawMaterialWarehouseItems,
+        finishedGoodsMasterItems,
+        finishedGoodsWarehouseItems
+    } = useMemo(() => {
+        const fgParentCat = categories.find(c => c.name === 'Finished Goods');
+        const fgCategoryIds = new Set<string>();
+        if (fgParentCat) {
+            fgCategoryIds.add(fgParentCat.id);
+            categories.forEach(cat => {
+                if (cat.parentCategoryId === fgParentCat.id) {
+                    fgCategoryIds.add(cat.id);
+                }
+            });
+        }
+
+        const allMasterItems = masterItems;
+        const allWarehouseItems = warehouseItems;
+
+        const rawMIs = allMasterItems.filter(mi => !fgCategoryIds.has(mi.categoryId));
+        const finishedMIs = allMasterItems.filter(mi => fgCategoryIds.has(mi.categoryId));
+
+        const rawWHIs = allWarehouseItems.filter(whi => {
+            const mi = allMasterItems.find(i => i.id === whi.masterItemId);
+            return mi ? !fgCategoryIds.has(mi.categoryId) : false;
+        });
+
+        const finishedWHIs = allWarehouseItems.filter(whi => {
+            const mi = allMasterItems.find(i => i.id === whi.masterItemId);
+            return mi ? fgCategoryIds.has(mi.categoryId) : false;
+        });
+
+        return {
+            rawMaterialMasterItems: rawMIs,
+            rawMaterialWarehouseItems: rawWHIs,
+            finishedGoodsMasterItems: finishedMIs,
+            finishedGoodsWarehouseItems: finishedWHIs
+        };
+    }, [masterItems, warehouseItems, categories]);
+
 
     const handleNavigate = (newPage: Page | { page: Page; id: string }) => {
         setPage(newPage);
@@ -188,7 +230,13 @@ const App: React.FC = () => {
             return updatedItems.filter(i => i.quantity > 0.01);
         });
         toast.success(`${itemsToUnload.length} item(s) unloaded from warehouse.`);
-        handleNavigate(Page.Warehouse);
+        
+        const currentPage = typeof page === 'string' ? page : page.page;
+        if(currentPage === Page.WarehouseFinishedGoods) {
+            handleNavigate(Page.WarehouseFinishedGoods);
+        } else {
+            handleNavigate(Page.Warehouse);
+        }
     }
     const handleLoadFinishedGoods = (batchId: string, itemsToLoad: Omit<WarehouseItem, 'id'>[]) => {
         const newItems = itemsToLoad.map(item => ({ ...item, id: generateUniqueId('wh_fg')}));
@@ -334,32 +382,27 @@ const App: React.FC = () => {
                 return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => handleNavigate({ page: Page.Recipes, id: 'new'})} onEditRecipe={(recipe) => handleNavigate({ page: Page.Recipes, id: recipe.id })} onDeleteRecipe={handleDeleteRecipe} />;
             case Page.Warehouse:
                  if (pageId === 'load') {
-                    return <WarehouseLoadFormPage masterItems={masterItems} locations={locations} onSave={handleLoadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
+                    return <WarehouseLoadFormPage masterItems={rawMaterialMasterItems} locations={locations} onSave={handleLoadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
                 }
                  if (pageId === 'unload') {
-                    return <WarehouseUnloadFormPage masterItems={masterItems} warehouseItems={warehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
+                    return <WarehouseUnloadFormPage masterItems={rawMaterialMasterItems} warehouseItems={rawMaterialWarehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
                 }
                 return <WarehousePage 
-                            warehouseItems={warehouseItems} masterItems={masterItems} locations={locations} categories={categories}
+                            warehouseItems={rawMaterialWarehouseItems} masterItems={masterItems} locations={locations} categories={categories}
                             onLoadItems={() => handleNavigate({ page: Page.Warehouse, id: 'load'})}
                             onUnloadItems={() => handleNavigate({ page: Page.Warehouse, id: 'unload'})}
                             onMoveItems={() => {}} // Placeholder
-                            title={t('Warehouse')}
+                            title={t('Raw Materials Warehouse')}
                             showLoadButton={true}
                         />;
             case Page.WarehouseFinishedGoods:
-                const finishedGoodsParentCat = categories.find(c => c.name === 'Finished Goods');
-                const finishedGoodsCategoryIds = categories.filter(c => c.parentCategoryId === finishedGoodsParentCat?.id).map(c => c.id);
-                const finishedGoodsMasterItemIds = masterItems.filter(mi => finishedGoodsCategoryIds.includes(mi.categoryId)).map(mi => mi.id);
-                const filteredWarehouseItems = warehouseItems.filter(whi => finishedGoodsMasterItemIds.includes(whi.masterItemId));
-                
-                 if (pageId === 'unload') {
-                    return <WarehouseUnloadFormPage masterItems={masterItems} warehouseItems={filteredWarehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.WarehouseFinishedGoods)} />;
+                if (pageId === 'unload') {
+                    return <WarehouseUnloadFormPage masterItems={finishedGoodsMasterItems} warehouseItems={finishedGoodsWarehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.WarehouseFinishedGoods)} />;
                 }
                 return <WarehousePage 
-                            warehouseItems={filteredWarehouseItems} masterItems={masterItems} locations={locations} categories={categories}
+                            warehouseItems={finishedGoodsWarehouseItems} masterItems={masterItems} locations={locations} categories={categories}
                             onLoadItems={() => {}} // No manual loading for FG
-                            onUnloadItems={() => handleNavigate({ page: Page.Warehouse, id: 'unload'})} // Navigate to general unload form
+                            onUnloadItems={() => handleNavigate({ page: Page.WarehouseFinishedGoods, id: 'unload'})}
                             onMoveItems={() => {}} // Placeholder
                             title={t('Finished Goods Warehouse')}
                             showLoadButton={false}
