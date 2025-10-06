@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BrewFlow - Brewery Management</title>
+    <link rel="icon" href="data:image/svg+xml,%3csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M50 2 C25 2 10 30 10 50 C10 75 50 98 50 98 S90 75 90 50 C90 30 75 2 50 2 Z' fill='%23fd7e14' /%3e%3cg fill='%23FFFFFF' fill-opacity='0.75'%3e%3cpath d='M50 25 C42 35 42 45 50 55 C58 45 58 35 50 25 Z' /%3e%3cpath d='M50 50 C38 60 38 70 50 80 C62 70 62 60 50 50 Z' /%3e%3cpath d='M39 38 C34 48 39 58 49 63 C44 53 44 43 39 38 Z' /%3e%3cpath d='M61 38 C66 48 61 58 51 63 C56 53 56 43 61 38 Z' /%3e%3c/g%3e%3c/svg%3e" type="image/svg+xml">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'color-background': '#f8f9fa', // Main background (light gray)
+              'color-surface': '#ffffff',    // Card background (white)
+              'color-border': '#dee2e6',     // Borders (gray)
+              'color-accent': '#fd7e14',     // Vibrant orange accent
+              'color-secondary': '#0d6efd',  // Professional blue secondary
+              'color-text': '#212529',      // Main text color (dark)
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      /* Custom scrollbar for a more integrated look */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f8f9fa; /* color-background */
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #dee2e6; /* color-border */
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #adb5bd;
+      }
+      
+      /* Enable smooth scrolling for anchor links or programmatic scrolls */
+      html {
+        scroll-behavior: smooth;
+      }
+
+      /* Base transitions for a more dynamic feel */
+      button, a, select, input {
+        transition: all 0.2s ease-in-out;
+      }
+
+      /* Custom styles for native date picker */
+      input[type="date"] {
+        color-scheme: dark; /* Hints browser to use dark UI for the calendar popup */
+        position: relative;
+      }
+      /* Style the calendar icon for WebKit browsers */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        /* Start with a neutral color that fits the theme */
+        filter: invert(75%) sepia(10%) saturate(250%) hue-rotate(345deg) brightness(95%) contrast(90%);
+        transition: filter 0.2s ease-in-out;
+      }
+      /* Change color on hover to the accent color */
+      input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        /* Filter generated to approximate the color-accent orange (#fd7e14) */
+        filter: invert(62%) sepia(88%) saturate(1450%) hue-rotate(350deg) brightness(101%) contrast(98%);
+      }
+    </style>
+    <!-- PDF & Excel Generation Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "chart.js": "https://esm.sh/chart.js@4.4.2",
+    "react-chartjs-2": "https://esm.sh/react-chartjs-2@5.2.0?external=react,chart.js"
+  }
+}
+</script>
+</head>
+  <body class="bg-color-background text-color-text h-full">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
