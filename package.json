@@ -1,8 +1,21 @@
 {
+  "name": "breapp",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-chartjs-2": "^5.2.0",
-    "chart.js": "^4.4.2"
+    "react-chartjs-2": "^5.3.0",
+    "chart.js": "^4.5.0"
+  },
+  "devDependencies": {
+    "vite": "^6.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.6.3"
   }
 }
