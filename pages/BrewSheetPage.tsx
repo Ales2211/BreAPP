@@ -6,7 +6,6 @@ import Select from '../components/ui/Select';
 import { useTranslation } from '../hooks/useTranslation';
 import { useToast } from '../hooks/useToast';
 import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MashTunIcon, DropletIcon, ThermometerIcon, YeastIcon, BottleIcon, DownloadIcon } from '../components/Icons';
-import ConfirmationModal from '../components/ConfirmationModal';
 
 interface BrewSheetPageProps {
   batch: BrewSheet;
@@ -18,7 +17,6 @@ interface BrewSheetPageProps {
   onBack: () => void;
   onSave: (batch: BrewSheet) => void;
   onUnloadItems: (items: Omit<WarehouseItem, 'id'>[]) => void;
-  onLoadFinishedGoods: (batchId: string, items: Omit<WarehouseItem, 'id'>[]) => void;
 }
 
 type UnloadItem = {
@@ -160,13 +158,12 @@ const UnloadMaterialsCard: React.FC<{
     );
 };
 
-const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems, onLoadFinishedGoods }) => {
+const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems }) => {
     const { t } = useTranslation();
     const toast = useToast();
     const [currentBatch, setCurrentBatch] = useState<BrewSheet>(batch);
     const [activeTab, setActiveTab] = useState('Mash');
     const [unloadList, setUnloadList] = useState<UnloadItem[]>([]);
-    const [isLoadConfirmOpen, setIsLoadConfirmOpen] = useState(false);
     
     useEffect(() => {
         setCurrentBatch(batch);
@@ -276,33 +273,6 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
         onSave(currentBatch);
     }
 
-    const handleConfirmLoadToWarehouse = () => {
-        const finishedGoodsLocation = locations.find(l => l.name.includes('Finished Goods'));
-        if (!finishedGoodsLocation) {
-            toast.error("Finished Goods warehouse location not found. Please configure it in Settings.");
-            return;
-        }
-
-        const itemsToLoad: Omit<WarehouseItem, 'id'>[] = currentBatch.packagingLog.packagedItems
-            .filter(item => item.quantityGood && item.quantityGood > 0)
-            .map(item => ({
-                masterItemId: item.masterItemId,
-                lotNumber: currentBatch.lot,
-                quantity: item.quantityGood!,
-                locationId: finishedGoodsLocation.id,
-                expiryDate: currentBatch.packagingLog.bestBeforeDate || '',
-                documentNumber: `PKG-${currentBatch.lot}`,
-                arrivalDate: currentBatch.packagingLog.packagingDate || new Date().toISOString().split('T')[0],
-            }));
-        
-        if (itemsToLoad.length > 0) {
-            onLoadFinishedGoods(currentBatch.id, itemsToLoad);
-        } else {
-            toast.info("No good items to load into the warehouse.");
-        }
-        setIsLoadConfirmOpen(false);
-    };
-
     // Unload materials handlers
     const handleAddUnloadItem = (item: Omit<UnloadItem, 'key'>) => {
         if (!item.masterItemId || !item.lotNumber || item.quantity <= 0) {
@@ -398,13 +368,6 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
 
     return (
         <div className="h-full flex flex-col">
-            <ConfirmationModal
-                isOpen={isLoadConfirmOpen}
-                onClose={() => setIsLoadConfirmOpen(false)}
-                onConfirm={handleConfirmLoadToWarehouse}
-                title={t('Confirm Load to Warehouse')}
-                message={t('Load_To_Warehouse_Confirmation')}
-            />
              <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-shrink-0">
                 <div className="flex items-center mb-4 sm:mb-0">
                     <button type="button" onClick={onBack} className="p-2 mr-2 md:mr-4 rounded-full hover:bg-color-border transition-colors">
@@ -1009,15 +972,6 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
                                         </tbody>
                                     </table>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setIsLoadConfirmOpen(true)}
-                                    disabled={currentBatch.packagingLog.packagingLoadedToWarehouse}
-                                    className="w-full mt-4 flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                >
-                                    <DownloadIcon className="w-5 h-5" />
-                                    <span>{t('Load to Warehouse')}</span>
-                                </button>
                             </Card>
                         </div>
                         <div className="lg:col-span-3">

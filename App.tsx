@@ -132,9 +132,64 @@ const App: React.FC = () => {
 
     // Batches
     const handleSaveBatch = (batchToSave: BrewSheet) => {
-        setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
+        const previousBatch = batches.find(b => b.id === batchToSave.id);
+        
         toast.success(`Batch ${batchToSave.lot} saved.`);
-    }
+    
+        if (!previousBatch) { // Should not happen on a save, but for safety
+            setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
+            return;
+        }
+    
+        const wasInProgress = ['In Progress', 'Fermenting'].includes(previousBatch.status);
+        const isNowPackaged = ['Packaged', 'Completed'].includes(batchToSave.status);
+        
+        // Condition for automatic loading
+        if (wasInProgress && isNowPackaged && !batchToSave.packagingLog.packagingLoadedToWarehouse) {
+            const finishedGoodsLocation = locations.find(l => l.name.includes('Finished Goods'));
+            if (!finishedGoodsLocation) {
+                toast.error("Finished Goods warehouse location not found. Please configure it in Settings.");
+                setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b)); // Save without loading
+                return;
+            }
+    
+            const itemsToLoad = batchToSave.packagingLog.packagedItems
+                .filter(item => item.quantityGood && item.quantityGood > 0)
+                .map(item => ({
+                    id: generateUniqueId('wh_fg'),
+                    masterItemId: item.masterItemId,
+                    lotNumber: batchToSave.lot,
+                    quantity: item.quantityGood!,
+                    locationId: finishedGoodsLocation.id,
+                    expiryDate: batchToSave.packagingLog.bestBeforeDate || '',
+                    documentNumber: `PKG-${batchToSave.lot}`,
+                    arrivalDate: batchToSave.packagingLog.packagingDate || new Date().toISOString().split('T')[0],
+                }));
+            
+            if (itemsToLoad.length > 0) {
+                // Update warehouse state
+                setWarehouseItems(prev => [...prev, ...itemsToLoad]);
+    
+                // Update batch state with the new data AND the warehouse flag
+                const updatedBatch = {
+                    ...batchToSave,
+                    packagingLog: {
+                        ...batchToSave.packagingLog,
+                        packagingLoadedToWarehouse: true,
+                    }
+                };
+                setBatches(batches.map(b => b.id === batchToSave.id ? updatedBatch : b));
+    
+                toast.success(`Finished goods for lot ${batchToSave.lot} automatically loaded to warehouse.`);
+            } else {
+                // No items to load, just save the batch as is
+                setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
+            }
+        } else {
+            // No status change that triggers loading, just save the batch
+            setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
+        }
+    };
     const handleDeleteBatch = (batchId: string) => {
         setBatches(batches.filter(b => b.id !== batchId));
         toast.success('Batch deleted.');
@@ -238,27 +293,6 @@ const App: React.FC = () => {
             handleNavigate(Page.Warehouse);
         }
     }
-    const handleLoadFinishedGoods = (batchId: string, itemsToLoad: Omit<WarehouseItem, 'id'>[]) => {
-        const newItems = itemsToLoad.map(item => ({ ...item, id: generateUniqueId('wh_fg')}));
-        setWarehouseItems(prev => [...prev, ...newItems]);
-
-        setBatches(prevBatches => prevBatches.map(batch => {
-            if (batch.id === batchId) {
-                return {
-                    ...batch,
-                    packagingLog: {
-                        ...batch.packagingLog,
-                        packagingLoadedToWarehouse: true,
-                    }
-                };
-            }
-            return batch;
-        }));
-        
-        const batchLot = batches.find(b => b.id === batchId)?.lot;
-        toast.success(`Finished goods for lot ${batchLot} loaded successfully.`);
-        handleNavigate(Page.WarehouseFinishedGoods);
-    };
 
     // Suppliers
     const handleSaveSupplier = (supplierToSave: Supplier | Omit<Supplier, 'id'>) => {
@@ -357,7 +391,6 @@ const App: React.FC = () => {
                                     onBack={() => handleNavigate(Page.Batches)} 
                                     onSave={handleSaveBatch}
                                     onUnloadItems={handleUnloadWarehouseItems}
-                                    onLoadFinishedGoods={handleLoadFinishedGoods}
                                 />;
                     }
                 }

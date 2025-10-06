@@ -18,7 +18,8 @@ const RecipeCard: React.FC<{ recipe: Recipe, recipeCost: number, onEdit: () => v
         onDelete();
     };
 
-    const costPerLiter = recipe.qualityControlSpec.liters.target > 0 ? (recipeCost / recipe.qualityControlSpec.liters.target) : 0;
+    const targetLiters = recipe.qualityControlSpec?.liters?.target ?? 0;
+    const costPerLiter = targetLiters > 0 ? (recipeCost / targetLiters) : 0;
 
     return (
         <div
@@ -34,10 +35,10 @@ const RecipeCard: React.FC<{ recipe: Recipe, recipeCost: number, onEdit: () => v
                     <h3 className="text-xl font-bold text-color-accent">{recipe.name}</h3>
                     <p className="text-sm text-gray-500">{recipe.style}</p>
                     <div className="flex flex-wrap gap-x-4 text-sm text-gray-500 mt-2">
-                        <span>{t('ABV')}: {recipe.qualityControlSpec.abv.target}%</span>
-                        <span>{t('IBU')}: {recipe.qualityControlSpec.ibu.target}</span>
-                        <span>{t('OG')}: {recipe.qualityControlSpec.og.target}°P</span>
-                        <span>{t('FG')}: {recipe.qualityControlSpec.fg.target}°P</span>
+                        <span>{t('ABV')}: {recipe.qualityControlSpec?.abv?.target ?? 'N/A'}%</span>
+                        <span>{t('IBU')}: {recipe.qualityControlSpec?.ibu?.target ?? 'N/A'}</span>
+                        <span>{t('OG')}: {recipe.qualityControlSpec?.og?.target ?? 'N/A'}°P</span>
+                        <span>{t('FG')}: {recipe.qualityControlSpec?.fg?.target ?? 'N/A'}°P</span>
                          {costPerLiter > 0 && <span>{t('Cost')}: {costPerLiter.toFixed(2)} €/L</span>}
                     </div>
                 </div>
