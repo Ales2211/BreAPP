@@ -17,6 +17,7 @@ const getBlankRecipe = (): Omit<Recipe, 'id'> => ({
         ibu: { target: 0 },
         liters: { target: 0 },
         finalPh: { target: 0 },
+        preFermentationPh: { target: 0 },
     },
     mashIngredients: [],
     boilWhirlpoolIngredients: [],
@@ -373,6 +374,7 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                                 { key: 'abv', label: 'ABV (%)', step: 0.1 },
                                 { key: 'ibu', label: 'IBU', step: 1 },
                                 { key: 'liters', label: 'Liters (L)', step: 1 },
+                                { key: 'preFermentationPh', label: 'Pre-fermentation pH', step: 0.01 },
                                 { key: 'finalPh', label: 'Final pH', step: 0.01 },
                             ].map(({key, label, step}) => (
                                 <React.Fragment key={key}>

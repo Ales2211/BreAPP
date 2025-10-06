@@ -133,6 +133,7 @@ export interface QualityControlSpecification {
     ibu: QualityControlValueSpec;
     liters: QualityControlValueSpec;
     finalPh?: QualityControlValueSpec;
+    preFermentationPh?: QualityControlValueSpec;
 }
 
 export interface SensoryPanelLog {
