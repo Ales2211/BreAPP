@@ -7,7 +7,7 @@ import Select from '../components/ui/Select';
 import { useTranslation } from '../hooks/useTranslation';
 // Fix: Add WarehouseItem to the import from ../types.
 import { BrewSheet, Recipe, MasterItem, Category, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, WarehouseItem } from '../types';
-import { BeakerIcon, ChartBarIcon, HopsIcon } from '../components/Icons';
+import { BeakerIcon, ChartBarIcon, HopsIcon, ClipboardCheckIcon } from '../components/Icons';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend);
 
@@ -38,7 +38,8 @@ const LineChart: React.FC<{ title: string; data: ChartData<'line'>; options: Cha
 );
 
 // Batch Comparison Section
-const BatchComparison: React.FC<{ recipes: Recipe[], batches: BrewSheet[], t: (key: string) => string }> = ({ recipes, batches, t }) => {
+// Fix: Added masterItems to props to allow for correct packaged volume calculation.
+const BatchComparison: React.FC<{ recipes: Recipe[], batches: BrewSheet[], masterItems: MasterItem[], t: (key: string) => string }> = ({ recipes, batches, masterItems, t }) => {
     const [selectedRecipeId, setSelectedRecipeId] = useState(recipes.length > 0 ? recipes[0].id : '');
 
     const { selectedRecipe, relevantBatches } = useMemo(() => {
@@ -103,9 +104,13 @@ const BatchComparison: React.FC<{ recipes: Recipe[], batches: BrewSheet[], t: (k
                 { type: 'line' as const, label: t('Target FG (°P)'), data: Array(labels.length).fill(selectedRecipe.qualityControlSpec.fg.target), borderColor: '#fd7e14', borderWidth: 2, pointRadius: 0 }
             ]
         };
-
+        // Fix: Corrected yield calculation by looking up containerVolumeL from the masterItem.
         const calculateYield = (batch: BrewSheet) => {
-            const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((sum, item) => sum + ((item.quantityGood || 0) * (item.formatLiters || 0)), 0);
+            const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((sum, item) => {
+                const masterItem = masterItems.find(mi => mi.id === item.masterItemId);
+                const volume = masterItem?.containerVolumeL || 0;
+                return sum + ((item.quantityGood || 0) * volume);
+            }, 0);
             const expectedLiters = batch.packagingLog.summaryExpectedLiters || 1;
             return (totalPackagedLiters / expectedLiters) * 100;
         };
@@ -134,7 +139,7 @@ const BatchComparison: React.FC<{ recipes: Recipe[], batches: BrewSheet[], t: (k
         };
         
         return { ogData, fgData, yieldData, yieldOverTimeData };
-    }, [selectedRecipe, relevantBatches, t]);
+    }, [selectedRecipe, relevantBatches, t, masterItems]);
 
     return (
         <Card title={t('Batch Comparison')} icon={<ChartBarIcon className="w-5 h-5"/>}>
@@ -155,15 +160,139 @@ const BatchComparison: React.FC<{ recipes: Recipe[], batches: BrewSheet[], t: (k
     );
 };
 
+// Parameter Range Analysis Section
+// Fix: Added masterItems to props to allow for correct packaged volume calculation.
+const ParameterRangeAnalysis: React.FC<{ recipes: Recipe[], batches: BrewSheet[], masterItems: MasterItem[], t: (key: string) => string }> = ({ recipes, batches, masterItems, t }) => {
+    const [selectedRecipeId, setSelectedRecipeId] = useState(recipes.length > 0 ? recipes[0].id : '');
+
+    const analysisResults = useMemo(() => {
+        const recipe = recipes.find(r => r.id === selectedRecipeId);
+        if (!recipe) return [];
+
+        const completedBatches = batches.filter(b => b.recipeId === selectedRecipeId && b.status === 'Completed');
+        if (completedBatches.length === 0) return [];
+
+        const getNumericValues = (path: string, batches: BrewSheet[]): number[] => {
+            return batches.map(batch => {
+                let value: any;
+                if (path.includes('[last]')) {
+                    const [basePath, prop] = path.split('[last].');
+                    const logEntries: any[] = basePath.split('.').reduce((obj, key) => obj?.[key], batch);
+                    if (logEntries && logEntries.length > 0) {
+                        for (let i = logEntries.length - 1; i >= 0; i--) {
+                            if (logEntries[i][prop] !== null && logEntries[i][prop] !== undefined) {
+                                value = logEntries[i][prop];
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    value = path.split('.').reduce((obj, key) => obj?.[key], batch);
+                }
+                const num = Number(value);
+                return isNaN(num) ? null : num;
+            }).filter((v): v is number => v !== null);
+        };
+        
+        // Fix: Corrected packaged liters calculation by looking up containerVolumeL from the masterItem.
+        const getPackagedLiters = (batch: BrewSheet): number => {
+            return batch.packagingLog.packagedItems.reduce((sum, item) => {
+                const masterItem = masterItems.find(mi => mi.id === item.masterItemId);
+                const volume = masterItem?.containerVolumeL || 0;
+                return sum + ((item.quantityGood || 0) * volume);
+            }, 0);
+        }
+
+        const parameters = [
+            { name: t('OG'), path: 'boilLog.actual.postBoilPlato', spec: recipe.qualityControlSpec.og, unit: '°P' },
+            { name: t('FG'), path: 'fermentationLog.actual.logEntries[last].gravity', spec: recipe.qualityControlSpec.fg, unit: '°P' },
+            { name: t('Packaged Liters (lt)'), path: 'packagingLog.packagedItems', spec: recipe.qualityControlSpec.liters, unit: 'L', customFunc: getPackagedLiters },
+            { name: t('Final pH'), path: 'fermentationLog.actual.logEntries[last].ph', spec: recipe.qualityControlSpec.finalPh, unit: '' },
+            { name: t('Mash pH'), path: 'mashLog.actual.mashPh', spec: {target: recipe.processParameters.expectedMashPh, min: recipe.processParameters.expectedMashPh - 0.1, max: recipe.processParameters.expectedMashPh + 0.1}, unit: '' },
+            { name: t('Pre-Boil (°P)'), path: 'boilLog.actual.preBoilPlato', spec: {target: recipe.processParameters.preBoilPlato}, unit: '°P' },
+        ];
+
+        return parameters.map(param => {
+            const values = param.customFunc 
+                ? completedBatches.map(param.customFunc).filter(v => !isNaN(v)) 
+                : getNumericValues(param.path, completedBatches);
+            
+            if (values.length === 0) return null;
+
+            const sum = values.reduce((a, b) => a + b, 0);
+            const avg = sum / values.length;
+            
+            const specMin = param.spec?.min ?? param.spec?.target;
+            const specMax = param.spec?.max ?? param.spec?.target;
+            
+            const isInSpec = (specMin !== undefined && specMax !== undefined) ? (avg >= specMin && avg <= specMax) : true;
+
+            return {
+                name: param.name,
+                spec: `${param.spec?.target?.toFixed(2) ?? 'N/A'} ${param.unit}`,
+                avg: `${avg.toFixed(2)} ${param.unit}`,
+                deviation: param.spec?.target ? `${((avg - param.spec.target) / param.spec.target * 100).toFixed(1)}%` : 'N/A',
+                isInSpec
+            };
+        }).filter(Boolean);
+
+    }, [selectedRecipeId, recipes, batches, t, masterItems]);
+
+    return (
+        <Card title={t('Quality Control Analysis')} icon={<ClipboardCheckIcon className="w-5 h-5"/>}>
+            <div className="mb-4">
+                <Select containerClassName="w-full md:w-1/2" label={t('Select Recipe to Compare')} value={selectedRecipeId} onChange={e => setSelectedRecipeId(e.target.value)}>
+                    {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </Select>
+            </div>
+            {analysisResults.length > 0 ? (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="border-b-2 border-color-border/50">
+                            <tr>
+                                <th className="p-2">{t('Parameter')}</th>
+                                <th className="p-2 text-right">{t('Specification')}</th>
+                                <th className="p-2 text-right">{t('Actual (Avg)')}</th>
+                                <th className="p-2 text-right">{t('Deviation')}</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-color-border/20">
+                            {analysisResults.map(result => (
+                                <tr key={result!.name}>
+                                    <td className="p-2 font-semibold">{result!.name}</td>
+                                    <td className="p-2 text-right font-mono">{result!.spec}</td>
+                                    <td className={`p-2 text-right font-mono font-bold ${result!.isInSpec ? 'text-green-500' : 'text-red-500'}`}>
+                                        {result!.avg}
+                                    </td>
+                                    <td className={`p-2 text-right font-mono ${result!.isInSpec ? 'text-green-500' : 'text-red-500'}`}>
+                                        {result!.deviation}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            ) : <p className="text-gray-500">{t('No completed batches found for this recipe.')}</p>}
+        </Card>
+    );
+};
+
+
 // Leaderboards Section
-const ProductionLeaderboards: React.FC<{ recipes: Recipe[], batches: BrewSheet[], t: (key: string) => string }> = ({ recipes, batches, t }) => {
+// Fix: Added masterItems to props to allow for correct packaged volume calculation.
+const ProductionLeaderboards: React.FC<{ recipes: Recipe[], batches: BrewSheet[], masterItems: MasterItem[], t: (key: string) => string }> = ({ recipes, batches, masterItems, t }) => {
     const { batchesPerRecipe, volumePerRecipe } = useMemo(() => {
         const batchCounts: { [key: string]: number } = {};
         const volumeCounts: { [key: string]: number } = {};
 
         batches.forEach(b => {
             batchCounts[b.recipeId] = (batchCounts[b.recipeId] || 0) + 1;
-            const totalPackagedLiters = b.packagingLog.packagedItems.reduce((sum, item) => sum + ((item.quantityGood || 0) * (item.formatLiters || 0)), 0);
+            // Fix: Corrected packaged liters calculation by looking up containerVolumeL from the masterItem.
+            const totalPackagedLiters = b.packagingLog.packagedItems.reduce((sum, item) => {
+                const masterItem = masterItems.find(mi => mi.id === item.masterItemId);
+                const volume = masterItem?.containerVolumeL || 0;
+                return sum + ((item.quantityGood || 0) * volume);
+            }, 0);
             volumeCounts[b.recipeId] = (volumeCounts[b.recipeId] || 0) + totalPackagedLiters;
         });
 
@@ -178,7 +307,7 @@ const ProductionLeaderboards: React.FC<{ recipes: Recipe[], batches: BrewSheet[]
             .sort((a, b) => b.volume - a.volume);
             
         return { batchesPerRecipe: sortedBatchCounts, volumePerRecipe: sortedVolumeCounts };
-    }, [recipes, batches]);
+    }, [recipes, batches, masterItems]);
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -224,21 +353,26 @@ const IngredientTraceability: React.FC<{ batches: BrewSheet[], masterItems: Mast
         };
         const results: ForwardResult[] = [];
 
-        batch.mashLog.actual.ingredients.forEach(ing => {
-            if (ing.lotNumber) {
-                results.push({ item: masterItems.find(mi => mi.id === ing.masterItemId), lotNumber: ing.lotNumber, quantity: ing.quantity, stage: t('Mash') });
-            }
-        });
-        batch.boilLog.actual.ingredients.forEach(ing => {
-            if (ing.lotNumber) {
-                results.push({ item: masterItems.find(mi => mi.id === ing.masterItemId), lotNumber: ing.lotNumber, quantity: ing.quantity, stage: t('Boil') });
-            }
-        });
-        batch.fermentationLog.actual.additions.forEach(ing => {
-            if (ing.lotNumber) {
-                results.push({ item: masterItems.find(mi => mi.id === ing.masterItemId), lotNumber: ing.lotNumber, quantity: ing.quantity, stage: t('Fermentation') });
-            }
-        });
+        // Fix: Updated to iterate through lotAssignments array.
+        const processIngredients = (ingredients: ActualIngredient[], stage: string) => {
+            ingredients.forEach(ing => {
+                ing.lotAssignments.forEach(assignment => {
+                    if (assignment.lotNumber && assignment.quantity > 0) {
+                        results.push({
+                            item: masterItems.find(mi => mi.id === ing.masterItemId),
+                            lotNumber: assignment.lotNumber,
+                            quantity: assignment.quantity,
+                            stage
+                        });
+                    }
+                });
+            });
+        };
+
+        processIngredients(batch.mashLog.actual.ingredients, t('Mash'));
+        processIngredients(batch.boilLog.actual.ingredients, t('Boil'));
+        processIngredients(batch.fermentationLog.actual.additions, t('Fermentation'));
+        
         return results;
     }, [selectedBatchId, batches, masterItems, t]);
 
@@ -249,14 +383,17 @@ const IngredientTraceability: React.FC<{ batches: BrewSheet[], masterItems: Mast
         const searchTerm = ingredientLotSearch.trim().toLowerCase();
         
         batches.forEach(batch => {
+            // Fix: Updated to iterate through lotAssignments array.
             const checkIngredients = (ingredients: (ActualIngredient | ActualBoilWhirlpoolIngredient | ActualTankIngredient)[], stage: string) => {
                 ingredients.forEach(ing => {
-                    if (ing.lotNumber && ing.lotNumber.toLowerCase().includes(searchTerm)) {
-                        const item = masterItems.find(mi => mi.id === ing.masterItemId);
-                        if (item) {
-                            results.push({ batch, item, quantity: ing.quantity || 0, stage });
+                    ing.lotAssignments.forEach(assignment => {
+                        if (assignment.lotNumber && assignment.lotNumber.toLowerCase().includes(searchTerm)) {
+                            const item = masterItems.find(mi => mi.id === ing.masterItemId);
+                            if (item) {
+                                results.push({ batch, item, quantity: assignment.quantity, stage });
+                            }
                         }
-                    }
+                    });
                 });
             };
             checkIngredients(batch.mashLog.actual.ingredients, t('Mash'));
@@ -269,10 +406,11 @@ const IngredientTraceability: React.FC<{ batches: BrewSheet[], masterItems: Mast
     const uniqueLots = useMemo(() => {
         const lotSet = new Set<string>();
         warehouseItems.forEach(item => lotSet.add(item.lotNumber));
+        // Fix: Updated to iterate through lotAssignments array.
         batches.forEach(batch => {
-            batch.mashLog.actual.ingredients.forEach(ing => ing.lotNumber && lotSet.add(ing.lotNumber));
-            batch.boilLog.actual.ingredients.forEach(ing => ing.lotNumber && lotSet.add(ing.lotNumber));
-            batch.fermentationLog.actual.additions.forEach(ing => ing.lotNumber && lotSet.add(ing.lotNumber));
+            batch.mashLog.actual.ingredients.forEach(ing => ing.lotAssignments.forEach(a => a.lotNumber && lotSet.add(a.lotNumber)));
+            batch.boilLog.actual.ingredients.forEach(ing => ing.lotAssignments.forEach(a => a.lotNumber && lotSet.add(a.lotNumber)));
+            batch.fermentationLog.actual.additions.forEach(ing => ing.lotAssignments.forEach(a => a.lotNumber && lotSet.add(a.lotNumber)));
         });
         return Array.from(lotSet).sort();
     }, [warehouseItems, batches]);
@@ -364,8 +502,9 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ batches, recipes, masterIte
             <h1 className="text-3xl font-bold text-color-text mb-6 flex-shrink-0">{t('Analysis')}</h1>
             
             <div className="flex-1 overflow-y-auto pr-2 space-y-6">
-                <BatchComparison recipes={recipes} batches={batches} t={t} />
-                <ProductionLeaderboards recipes={recipes} batches={batches} t={t} />
+                <BatchComparison recipes={recipes} batches={batches} masterItems={masterItems} t={t} />
+                <ParameterRangeAnalysis recipes={recipes} batches={batches} masterItems={masterItems} t={t} />
+                <ProductionLeaderboards recipes={recipes} batches={batches} masterItems={masterItems} t={t} />
                 <IngredientTraceability batches={batches} masterItems={masterItems} t={t} warehouseItems={warehouseItems} />
             </div>
         </div>

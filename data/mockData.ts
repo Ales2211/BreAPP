@@ -1,4 +1,5 @@
-import { Recipe, BrewSheet, Category, MasterItem, WarehouseItem, Location, Supplier, Customer, Order } from "../types";
+
+import { Recipe, BrewSheet, Category, MasterItem, WarehouseItem, Location, Supplier, Customer, Order, Ingredient, BoilWhirlpoolIngredient, TankIngredient, MashStep } from "../types";
 
 export const mockLocations: Location[] = [
     // Brewhouse
@@ -133,7 +134,7 @@ export const mockMasterItems: MasterItem[] = [
     { id: 'item_63', name: 'Luppolo Perle (Hallertau) - Pellets T90', categoryId: 'cat_hops', unit: 'Kg', format: 5, defaultSupplierId: 'sup_mr_malt', purchaseCost: 16.20 },
     { id: 'item_64', name: 'Luppolo Vic Secret™ - Pellets T90', categoryId: 'cat_hops', unit: 'Kg', format: 5, defaultSupplierId: 'sup_mr_malt', purchaseCost: 41.80 },
     { id: 'item_65', name: 'Luppolo Superdelic™ - Pellets T90', categoryId: 'cat_hops', unit: 'Kg', format: 5, defaultSupplierId: 'sup_mr_malt', purchaseCost: 45.20 },
-    { id: 'item_66', name: 'Estratto di luppolo in CO2 YCH HyperBoost™ Mosaic®', categoryId: 'cat_hops', unit: 'Kg', format: 0.1, defaultSupplierId: 'sup_mr_malt', purchaseCost: 3518.00 },
+    { id: 'item_66', name: 'Estratto di luppolo in CO2 YCH HyperBoost™ Mosaic®', categoryId: 'cat_hops', unit: 'Kg', format: 1, defaultSupplierId: 'sup_mr_malt', purchaseCost: 3518.00 },
     { id: 'item_67', name: 'Estratto di luppolo in CO2 YCH DynaBoost™ Idaho 7®', categoryId: 'cat_hops', unit: 'Kg', format: 1, defaultSupplierId: 'sup_mr_malt', purchaseCost: 289.10 },
     { id: 'item_68', name: 'Estratto di luppolo in CO2 YCH HyperBoost™ Idaho 7®', categoryId: 'cat_hops', unit: 'Kg', format: 0.1, defaultSupplierId: 'sup_mr_malt', purchaseCost: 3202.00 },
     { id: 'item_69', name: 'Estratto di luppolo in CO2 YCH HyperBoost™ Krush®', categoryId: 'cat_hops', unit: 'Kg', format: 0.1, defaultSupplierId: 'sup_mr_malt', purchaseCost: 3979.00 },
@@ -188,9 +189,9 @@ export const mockMasterItems: MasterItem[] = [
     { id: 'item_112', name: 'ETICHETTA VARIGRAFICA', categoryId: 'cat_packaging', unit: 'pcs', format: 1, purchaseCost: 0.25 },
 
     // Finished Goods - Preserved from original list
-    { id: 'item_pkg_apa_can_fg', name: 'Finished Good - APA Can 44cl', categoryId: 'cat_cans', unit: 'pcs', salePrice: 2.5 },
-    { id: 'item_pkg_wit_keg_fg', name: 'Finished Good - Wit Keg 24L', categoryId: 'cat_kegs', unit: 'pcs', salePrice: 80.0 },
-    { id: 'item_pkg_neipa_can_fg', name: 'Finished Good - NEIPA Can 44cl', categoryId: 'cat_cans', unit: 'pcs', salePrice: 3.2 },
+    { id: 'item_pkg_apa_can_fg', name: 'Finished Good - APA Can 44cl', categoryId: 'cat_cans', unit: 'pcs', salePrice: 2.5, containerVolumeL: 0.44 },
+    { id: 'item_pkg_wit_keg_fg', name: 'Finished Good - Wit Keg 24L', categoryId: 'cat_kegs', unit: 'pcs', salePrice: 80.0, containerVolumeL: 24.0 },
+    { id: 'item_pkg_neipa_can_fg', name: 'Finished Good - NEIPA Can 44cl', categoryId: 'cat_cans', unit: 'pcs', salePrice: 3.2, containerVolumeL: 0.44 },
 ];
 
 const today = new Date();
@@ -385,15 +386,25 @@ const createBrewSheetFromRecipe = (recipe: Recipe, details: {
         cookDate: details.cookDate,
         fermenterId: details.fermenterId,
         status: details.status,
+        unloadStatus: {
+            mash: false,
+            boil: false,
+            fermentation: false,
+        },
         mashLog: {
             expected: {
                 ingredients: deepCopy(recipe.mashIngredients),
                 steps: deepCopy(recipe.mashSteps),
                 mashPh: recipe.processParameters.expectedMashPh,
                 expectedIodineTime: recipe.processParameters.expectedIodineTime,
+                mashWaterMainsL: recipe.processParameters.mashWaterMainsL,
+                mashWaterMainsMicroSiemens: recipe.processParameters.mashWaterMainsMicroSiemens,
+                mashWaterRoL: recipe.processParameters.mashWaterRoL,
+                mashWaterRoMicroSiemens: recipe.processParameters.mashWaterRoMicroSiemens,
+                maltMilling: recipe.processParameters.maltMilling,
             },
             actual: {
-                ingredients: deepCopy(recipe.mashIngredients),
+                ingredients: deepCopy(recipe.mashIngredients).map((ing: Ingredient) => ({ id: ing.id, masterItemId: ing.masterItemId, lotAssignments: [] })),
                 steps: deepCopy(recipe.mashSteps),
             }
         },
@@ -406,6 +417,9 @@ const createBrewSheetFromRecipe = (recipe: Recipe, details: {
                 firstWortPh: recipe.processParameters.firstWortPh,
                 lastWortPlato: recipe.processParameters.lastWortPlato,
                 lastWortPh: recipe.processParameters.lastWortPh,
+                spargeWaterL: recipe.processParameters.spargeWaterL,
+                spargeWaterMicroSiemens: recipe.processParameters.spargeWaterMicroSiemens,
+                spargeWaterPh: recipe.processParameters.spargeWaterPh,
             },
             actual: {}
         },
@@ -424,7 +438,7 @@ const createBrewSheetFromRecipe = (recipe: Recipe, details: {
                 coolingDuration: recipe.processParameters.coolingDuration,
             },
             actual: {
-                ingredients: deepCopy(recipe.boilWhirlpoolIngredients),
+                ingredients: deepCopy(recipe.boilWhirlpoolIngredients).map((ing: BoilWhirlpoolIngredient) => ({ ...ing, lotAssignments: [] })),
             }
         },
         fermentationLog: {
@@ -433,14 +447,14 @@ const createBrewSheetFromRecipe = (recipe: Recipe, details: {
                 additions: deepCopy(recipe.tankIngredients)
             },
             actual: {
-                additions: deepCopy(recipe.tankIngredients),
+                additions: deepCopy(recipe.tankIngredients).map((ing: TankIngredient) => ({ ...ing, lotAssignments: [] })),
                 logEntries: []
             }
         },
         packagingLog: {
             summaryExpectedLiters: recipe.qualityControlSpec.liters.target,
             packagingLoadedToWarehouse: false,
-            packagedItems: deepCopy(recipe.packagedItems).map((p: any) => ({ ...p, formatLiters: 0, quantityUsed: 0, quantityGood: 0 }))
+            packagedItems: deepCopy(recipe.packagedItems).map((p: any) => ({ ...p, quantityGood: 0 }))
         },
         qualityControlLog: {
             sensoryPanelLogs: [],

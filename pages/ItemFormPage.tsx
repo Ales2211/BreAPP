@@ -19,6 +19,7 @@ const getBlankItem = (defaultCategoryId: string): Omit<MasterItem, 'id'> => ({
     categoryId: defaultCategoryId,
     unit: 'Kg',
     format: undefined,
+    containerVolumeL: undefined,
     defaultSupplierId: undefined,
     purchaseCost: undefined,
     salePrice: undefined,
@@ -65,6 +66,16 @@ const ItemFormPage: React.FC<ItemFormPageProps> = ({ item, categories, suppliers
         onSave(formData as MasterItem);
     }
     
+    const isFinishedGood = useMemo(() => {
+        const itemCategory = categories.find(c => c.id === formData.categoryId);
+        if (!itemCategory) return false;
+
+        const finishedGoodsCategory = categories.find(c => c.name === 'Finished Goods');
+        if (!finishedGoodsCategory) return false;
+
+        return itemCategory.parentCategoryId === finishedGoodsCategory.id || itemCategory.id === finishedGoodsCategory.id;
+    }, [formData.categoryId, categories]);
+    
     const units: MasterItem['unit'][] = ['Kg', 'g', 'Lt', 'pcs'];
 
     return (
@@ -92,15 +103,17 @@ const ItemFormPage: React.FC<ItemFormPageProps> = ({ item, categories, suppliers
                         ))}
                     </Select>
                     
-                    <Select 
-                        label={t('Default Supplier')}
-                        name="defaultSupplierId" 
-                        value={formData.defaultSupplierId || ''} 
-                        onChange={handleChange} 
-                    >
-                        <option value="">{t('None')}</option>
-                        {suppliers.map(sup => <option key={sup.id} value={sup.id}>{sup.name}</option>)}
-                    </Select>
+                    {!isFinishedGood && (
+                        <Select 
+                            label={t('Default Supplier')}
+                            name="defaultSupplierId" 
+                            value={formData.defaultSupplierId || ''} 
+                            onChange={handleChange} 
+                        >
+                            <option value="">{t('None')}</option>
+                            {suppliers.map(sup => <option key={sup.id} value={sup.id}>{sup.name}</option>)}
+                        </Select>
+                    )}
 
                     <Select label={t('Unit')} name="unit" value={formData.unit} onChange={handleChange}>
                         {units.map(u => <option key={u} value={u}>{u}</option>)}
@@ -114,6 +127,18 @@ const ItemFormPage: React.FC<ItemFormPageProps> = ({ item, categories, suppliers
                         value={formData.format ?? ''} 
                         onChange={handleNumericChange} 
                     />
+                    
+                     {isFinishedGood && (
+                        <Input 
+                            label={`${t('Container Volume')} (L)`}
+                            name="containerVolumeL" 
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={formData.containerVolumeL ?? ''} 
+                            onChange={handleNumericChange} 
+                        />
+                    )}
 
                     <Input 
                         label={`${t('Purchase Cost')} (€/${formData.unit})`}

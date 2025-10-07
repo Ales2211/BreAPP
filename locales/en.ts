@@ -25,6 +25,7 @@ export const en = {
     'Target': 'Target',
     'Min': 'Min',
     'Max': 'Max',
+    'Close': 'Close',
 
     // Sidebar & Page Titles
     'Dashboard': 'Dashboard',
@@ -89,11 +90,11 @@ export const en = {
     // Brew Sheet
     'Brew Sheet': 'Brew Sheet',
     'Save Batch': 'Save Batch',
+    'Current Status': 'Current Status',
     'Mash': 'Mash',
     'Lauter': 'Lauter',
     'Boil': 'Boil',
     'Fermentation': 'Fermentation',
-    // FIX: Renamed key to be specific to the brew step context to avoid conflicts.
     'BrewStep_Packaging': 'Packaging',
     'QC': 'QC',
     'Expected': 'Expected',
@@ -112,24 +113,20 @@ export const en = {
     'First Wort pH': 'First Wort pH',
     'Last Wort (°P)': 'Last Wort (°P)',
     'Last Wort pH': 'Last Wort pH',
-    'Transfer Duration (min)': 'Transfer Duration (min)',
-    'Recirculation Duration (min)': 'Recirculation Duration (min)',
-    'Filtration Duration (min)': 'Filtration Duration (min)',
+    'Transfer': 'Transfer',
+    'Recirculation': 'Recirculation',
+    'Filtration': 'Filtration',
     'Pre-Boil Liters': 'Pre-Boil Liters',
     'Pre-Boil Plato': 'Pre-Boil Plato',
     'Pre-boil pH': 'Pre-boil pH',
-    'Expected Boil Duration (min)': 'Expected Boil Duration (min)',
     'Post-Boil Liters': 'Post-Boil Liters',
     'Post-Boil Plato': 'Post-Boil Plato',
     'Post-Boil pH': 'Post-Boil pH',
-    'Boil Start Time': 'Boil Start Time',
-    'Boil End Time': 'Boil End Time',
-    'Expected Whirlpool Duration (min)': 'Expected Whirlpool Duration (min)',
-    'Actual Whirlpool Duration (min)': 'Actual Whirlpool Duration (min)',
-    'Expected Whirlpool Rest Duration (min)': 'Expected Whirlpool Rest Duration (min)',
-    'Actual Whirlpool Rest Duration (min)': 'Actual Whirlpool Rest Duration (min)',
-    'Expected Cooling Duration (min)': 'Expected Cooling Duration (min)',
-    'Actual Cooling Duration (min)': 'Actual Cooling Duration (min)',
+    'Start Time': 'Start Time',
+    'End Time': 'End Time',
+    'Calculated Duration': 'Calculated Duration',
+    'Actual Duration': 'Actual Duration',
+    'Whirlpool Rest': 'Whirlpool Rest',
     'Cooling': 'Cooling',
     'LiterCounterReadings': 'Liter Counter Readings',
     'WashingLiterCounter': 'Washing Counter',
@@ -157,7 +154,7 @@ export const en = {
     'Saturation pressure and time': 'Saturation pressure and time',
     'Packaged Items Log': 'Packaged Items Log',
     'Unknown Item': 'Unknown Item',
-    'Format (L)': 'Format (L)',
+    'Container Volume': 'Container Volume',
     'Quantity Used': 'Quantity Used',
     'Quantity Good': 'Quantity Good',
     'Packaging Date': 'Packaging Date',
@@ -172,7 +169,6 @@ export const en = {
     'Can Waste Percentage (%)': 'Can Waste Percentage (%)',
     'Keg Percentage (%)': 'Keg Percentage (%)',
     'Total Loss (lt)': 'Total Loss (lt)',
-    // FIX: Renamed key to be specific to the packaging summary to avoid conflicts.
     'Packaging_Yield_Percent': 'Total Yield (%)',
     'Enter any packaging notes here...': 'Enter any packaging notes here...',
     'Unload Packaging Materials': 'Unload Packaging Materials',
@@ -184,6 +180,22 @@ export const en = {
     'Confirm Unload': 'Confirm Unload',
     'Packaging materials unloaded': 'Packaging materials unloaded',
     'Fermentation Performance': 'Fermentation Performance',
+    'Actual Temperature (°C)': 'Actual Temperature (°C)',
+
+    'Start Brew Day?': 'Start Brew Day?',
+    'This will change the status to "In Progress" and marks the beginning of the brew day for lot': 'This will change the status to "In Progress" and marks the beginning of the brew day for lot',
+    'Start Brew Day': 'Start Brew Day',
+    'Move to Fermentation?': 'Move to Fermentation?',
+    'This will change the status to "Fermenting", indicating the brew day is complete.': 'This will change the status to "Fermenting", indicating the brew day is complete.',
+    'Start Fermentation': 'Start Fermentation',
+    'Start Packaging?': 'Start Packaging?',
+    'This will change the status to "Packaged" and automatically set today as the packaging date.': 'This will change the status to "Packaged" and automatically set today as the packaging date.',
+    'Start Packaging': 'Start Packaging',
+    'Complete Batch?': 'Complete Batch?',
+    'This will mark the batch as "Completed" and archive it. Ensure all data is finalized.': 'This will mark the batch as "Completed" and archive it. Ensure all data is finalized.',
+    'Complete Batch': 'Complete Batch',
+    'This batch is completed and archived. No further status changes are possible.': 'This batch is completed and archived. No further status changes are possible.',
+    'Next Step': 'Next Step',
 
     // Recipes
     'New Recipe': 'New Recipe',
@@ -243,6 +255,14 @@ export const en = {
     'Total Batch Cost': 'Total Batch Cost',
     'Cost per Liter': 'Cost per Liter',
     'Targets': 'Targets',
+    'General': 'General',
+    'Raw Materials': 'Raw Materials',
+    'Water': 'Water',
+    'Process': 'Process',
+    'Infusion': 'Infusion',
+    'Decoction': 'Decoction',
+    'Temperature': 'Temperature',
+
 
     // Warehouse
     'Load Stock': 'Load Stock',
@@ -309,7 +329,7 @@ export const en = {
     'Create Customer': 'Create Customer',
     'Delete Customer': 'Delete Customer',
     'Are you sure you want to delete customer': 'Are you sure you want to delete customer',
-    
+
     // Orders
     'New Order': 'New Order',
     'No orders yet': 'No orders yet',
@@ -329,8 +349,7 @@ export const en = {
     'Price per Unit': 'Price per Unit',
     'Line Total': 'Line Total',
     'Grand Total': 'Grand Total',
-
-
+    
     // Locations
     'New Location': 'New Location',
     'No locations defined': 'No locations defined',
@@ -338,12 +357,14 @@ export const en = {
     'Create New Location': 'Create New Location',
     'Location Name': 'Location Name',
     'Location Type': 'Location Type',
+    'Tank': 'Tank',
+    'LocationType_Warehouse': 'Warehouse',
+    'LocationType_Other': 'Other',
     'Edit Location': 'Edit Location',
     'Create Location': 'Create Location',
     'Delete Location': 'Delete Location',
     'Are you sure you want to delete location': 'Are you sure you want to delete location',
-
-
+    
     // Analysis
     'Batch Comparison': 'Batch Comparison',
     'Select Recipe to Compare': 'Select Recipe to Compare',
@@ -368,7 +389,14 @@ export const en = {
     'Actual FG (°P)': 'Actual FG (°P)',
     'Stage': 'Stage',
     'Used': 'Used',
-
+    'Quality Control Analysis': 'Quality Control Analysis',
+    'Parameter': 'Parameter',
+    'Specification': 'Specification',
+    'Actual (Avg)': 'Actual (Avg)',
+    'Deviation': 'Deviation',
+    'In Spec': 'In Spec',
+    'Out of Spec': 'Out of Spec',
+    
     // Tools
     'Priming Sugar Calculator': 'Priming Sugar Calculator',
     'Enter your batch details to calculate the required priming sugar.': 'Enter your batch details to calculate the required priming sugar.',
@@ -394,38 +422,45 @@ export const en = {
     'Italian': 'Italian',
     'Category Management': 'Category Management',
     'Manage your product categories and subcategories.': 'Manage your product categories and subcategories.',
+    'Parent Category': 'Parent Category',
+    'No parent (is a main category)': 'No parent (is a main category)',
     'Add New Category': 'Add New Category',
     'Edit Category': 'Edit Category',
     'Create Category': 'Create Category',
     'Category Name': 'Category Name',
-    'Parent Category': 'Parent Category',
-    'No parent (is a main category)': 'No parent (is a main category)',
     'Delete Category': 'Delete Category',
     'Are you sure you want to delete category': 'Are you sure you want to delete category',
     'Deleting a category will also delete all its subcategories. This action cannot be undone.': 'Deleting a category will also delete all its subcategories. This action cannot be undone.',
 
-    // Calendar
-    'Today': 'Today',
-
-    // Production Plan
+    // QC Page
+    'QC Dashboard Coming Soon': 'QC Dashboard Coming Soon',
+    'A summary of batch quality and consistency will be available here.': 'A summary of batch quality and consistency will be available here.',
+    
+    // Procurement Page
+    'Supplier Order': 'Supplier Order',
+    'Date': 'Date',
+    'Item': 'Item',
+    'Download PDF': 'Download PDF',
+    'Download Excel': 'Download Excel',
+    'Unassigned Supplier': 'Unassigned Supplier',
+    'No_Planned_Batches_Found': 'No Planned Batches Found',
+    'No_Planned_Batches_Description': 'Create a batch with a "Planned" status to see material requirements.',
     'Material Requirements': 'Material Requirements',
+    'Required': 'Required',
     'Available': 'Available',
     'Net Shortage': 'Net Shortage',
     'To Order': 'To Order',
-    'Item': 'Item',
-    'Required': 'Required',
-    'Unassigned Supplier': 'Unassigned Supplier',
-    'No_Planned_Batches_Found': 'No Planned Batches Found',
-    'No_Planned_Batches_Description': 'Material requirements are calculated based on all batches in "Planned" status.',
-    'Beer Name': 'Beer Name',
-    'Download PDF': 'Download PDF',
-    'Download Excel': 'Download Excel',
-    'Supplier Order': 'Supplier Order',
-    'Date': 'Date',
 
-    // Categories
-    'Raw Materials': 'Raw Materials',
+    // Brewsheet unload logic
+    'Unload Ingredients': 'Unload Ingredients',
+    'Ingredients Unloaded': 'Ingredients Unloaded',
+    'Ingredients for': 'Ingredients for',
+    'have been unloaded': 'have been unloaded',
+    'No ingredients with lot numbers to unload for': 'No ingredients with lot numbers to unload for',
+
+    // Specific category names that might be used as keys
     'Finished Goods': 'Finished Goods',
+    'Raw Materials': 'Raw Materials',
     'Malt': 'Malt',
     'Hops': 'Hops',
     'Yeast': 'Yeast',
@@ -433,34 +468,8 @@ export const en = {
     'Adjunct': 'Adjunct',
     'Sugar': 'Sugar',
     'Category_Packaging': 'Packaging',
+    'Category_Other': 'Other',
     'Cans': 'Cans',
     'Kegs': 'Kegs',
     'Bottles': 'Bottles',
-    'Category_Other': 'Other',
-    'Tank': 'Tank',
-    'LocationType_Warehouse': 'Warehouse',
-    'LocationType_Other': 'Other',
-
-    // Quality Control
-    'QC Dashboard Coming Soon': 'QC Dashboard Coming Soon',
-    'A summary of batch quality and consistency will be available here.': 'A summary of batch quality and consistency will be available here.',
-    'Quality Control Analysis': 'Quality Control Analysis',
-    'Parameter': 'Parameter',
-    'Specification': 'Specification',
-    'Deviation': 'Deviation',
-    'Sensory Panel Log': 'Sensory Panel Log',
-    'Add Sensory Log': 'Add Sensory Log',
-    'Panelist': 'Panelist',
-    'Overall Score': 'Overall Score',
-    'Aroma Notes': 'Aroma Notes',
-    'Flavor Notes': 'Flavor Notes',
-    'Lab Analysis Log': 'Lab Analysis Log',
-    'Add Lab Log': 'Add Lab Log',
-    'Diacetyl (ppb)': 'Diacetyl (ppb)',
-    'Microbiology': 'Microbiology',
-    'Pass': 'Pass',
-    'Fail': 'Fail',
-    'Pending': 'Pending',
-    'In Spec': 'In Spec',
-    'Out of Spec': 'Out of Spec'
 };

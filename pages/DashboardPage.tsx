@@ -245,7 +245,11 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ batches, warehouseItems, 
         
         const completedBatches = batches.filter(b => b.status === 'Completed' && b.packagingLog.summaryExpectedLiters && b.packagingLog.summaryExpectedLiters > 0);
         const totalYield = completedBatches.reduce((sum, batch) => {
-            const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((s, item) => s + ((item.quantityGood || 0) * (item.formatLiters || 0)), 0);
+            const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((s, packagedItem) => {
+                const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
+                const volume = masterItem?.containerVolumeL || 0;
+                return s + ((packagedItem.quantityGood || 0) * volume);
+            }, 0);
             const expectedLiters = batch.packagingLog.summaryExpectedLiters || 1; // Avoid division by zero
             return sum + (totalPackagedLiters / expectedLiters);
         }, 0);

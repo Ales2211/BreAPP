@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
@@ -21,7 +22,7 @@ import CustomersPage from './pages/CustomersPage';
 import OrdersListPage from './pages/OrdersListPage';
 import OrderFormPage from './pages/OrderFormPage';
 import QualityControlPage from './pages/QualityControlPage';
-import { Page, BrewSheet, Recipe, MasterItem, WarehouseItem, Location, Supplier, Category, Customer, Order } from './types';
+import { Page, BrewSheet, Recipe, MasterItem, WarehouseItem, Location, Supplier, Category, Customer, Order, Ingredient, BoilWhirlpoolIngredient, TankIngredient, MashStep } from './types';
 import { mockBrewSheets, mockRecipes, mockMasterItems, mockWarehouseItems, mockLocations, mockSuppliers, mockCategories, mockCustomers, mockOrders } from './data/mockData';
 import { useToast, } from './hooks/useToast';
 import { useTranslation } from './hooks/useTranslation';
@@ -132,63 +133,8 @@ const App: React.FC = () => {
 
     // Batches
     const handleSaveBatch = (batchToSave: BrewSheet) => {
-        const previousBatch = batches.find(b => b.id === batchToSave.id);
-        
+        setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
         toast.success(`Batch ${batchToSave.lot} saved.`);
-    
-        if (!previousBatch) { // Should not happen on a save, but for safety
-            setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
-            return;
-        }
-    
-        const wasInProgress = ['In Progress', 'Fermenting'].includes(previousBatch.status);
-        const isNowPackaged = ['Packaged', 'Completed'].includes(batchToSave.status);
-        
-        // Condition for automatic loading
-        if (wasInProgress && isNowPackaged && !batchToSave.packagingLog.packagingLoadedToWarehouse) {
-            const finishedGoodsLocation = locations.find(l => l.name.includes('Finished Goods'));
-            if (!finishedGoodsLocation) {
-                toast.error("Finished Goods warehouse location not found. Please configure it in Settings.");
-                setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b)); // Save without loading
-                return;
-            }
-    
-            const itemsToLoad = batchToSave.packagingLog.packagedItems
-                .filter(item => item.quantityGood && item.quantityGood > 0)
-                .map(item => ({
-                    id: generateUniqueId('wh_fg'),
-                    masterItemId: item.masterItemId,
-                    lotNumber: batchToSave.lot,
-                    quantity: item.quantityGood!,
-                    locationId: finishedGoodsLocation.id,
-                    expiryDate: batchToSave.packagingLog.bestBeforeDate || '',
-                    documentNumber: `PKG-${batchToSave.lot}`,
-                    arrivalDate: batchToSave.packagingLog.packagingDate || new Date().toISOString().split('T')[0],
-                }));
-            
-            if (itemsToLoad.length > 0) {
-                // Update warehouse state
-                setWarehouseItems(prev => [...prev, ...itemsToLoad]);
-    
-                // Update batch state with the new data AND the warehouse flag
-                const updatedBatch = {
-                    ...batchToSave,
-                    packagingLog: {
-                        ...batchToSave.packagingLog,
-                        packagingLoadedToWarehouse: true,
-                    }
-                };
-                setBatches(batches.map(b => b.id === batchToSave.id ? updatedBatch : b));
-    
-                toast.success(`Finished goods for lot ${batchToSave.lot} automatically loaded to warehouse.`);
-            } else {
-                // No items to load, just save the batch as is
-                setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
-            }
-        } else {
-            // No status change that triggers loading, just save the batch
-            setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
-        }
     };
     const handleDeleteBatch = (batchId: string) => {
         setBatches(batches.filter(b => b.id !== batchId));
@@ -207,14 +153,27 @@ const App: React.FC = () => {
             cookDate: details.cookDate,
             fermenterId: details.fermenterId,
             status: 'Planned',
+            unloadStatus: {
+                mash: false,
+                boil: false,
+                fermentation: false,
+            },
             mashLog: {
                 expected: JSON.parse(JSON.stringify({
                     ingredients: recipe.mashIngredients,
                     steps: recipe.mashSteps,
                     mashPh: recipe.processParameters.expectedMashPh,
                     expectedIodineTime: recipe.processParameters.expectedIodineTime,
+                    mashWaterMainsL: recipe.processParameters.mashWaterMainsL,
+                    mashWaterMainsMicroSiemens: recipe.processParameters.mashWaterMainsMicroSiemens,
+                    mashWaterRoL: recipe.processParameters.mashWaterRoL,
+                    mashWaterRoMicroSiemens: recipe.processParameters.mashWaterRoMicroSiemens,
+                    maltMilling: recipe.processParameters.maltMilling,
                 })),
-                actual: { ingredients: JSON.parse(JSON.stringify(recipe.mashIngredients)), steps: JSON.parse(JSON.stringify(recipe.mashSteps)) }
+                actual: { 
+                    ingredients: JSON.parse(JSON.stringify(recipe.mashIngredients)).map((ing: Ingredient) => ({ id: ing.id, masterItemId: ing.masterItemId, lotAssignments: [] })),
+                    steps: JSON.parse(JSON.stringify(recipe.mashSteps)).map((step: MashStep) => ({ ...step }))
+                }
             },
             lauterLog: {
                 expected: JSON.parse(JSON.stringify({
@@ -225,6 +184,9 @@ const App: React.FC = () => {
                      firstWortPh: recipe.processParameters.firstWortPh,
                      lastWortPlato: recipe.processParameters.lastWortPlato,
                      lastWortPh: recipe.processParameters.lastWortPh,
+                     spargeWaterL: recipe.processParameters.spargeWaterL,
+                     spargeWaterMicroSiemens: recipe.processParameters.spargeWaterMicroSiemens,
+                     spargeWaterPh: recipe.processParameters.spargeWaterPh,
                 })),
                 actual: {}
             },
@@ -242,19 +204,24 @@ const App: React.FC = () => {
                     whirlpoolRestDuration: recipe.processParameters.whirlpoolRestDuration,
                     coolingDuration: recipe.processParameters.coolingDuration,
                 })),
-                actual: { ingredients: JSON.parse(JSON.stringify(recipe.boilWhirlpoolIngredients)) }
+                actual: { 
+                    ingredients: JSON.parse(JSON.stringify(recipe.boilWhirlpoolIngredients)).map((ing: BoilWhirlpoolIngredient) => ({ ...ing, lotAssignments: [] })) 
+                }
             },
             fermentationLog: {
                 expected: JSON.parse(JSON.stringify({
                     steps: recipe.fermentationSteps,
                     additions: recipe.tankIngredients
                 })),
-                actual: { additions: JSON.parse(JSON.stringify(recipe.tankIngredients)), logEntries: [] }
+                actual: { 
+                    additions: JSON.parse(JSON.stringify(recipe.tankIngredients)).map((ing: TankIngredient) => ({ ...ing, lotAssignments: [] })),
+                    logEntries: []
+                }
             },
             packagingLog: {
                 summaryExpectedLiters: recipe.qualityControlSpec.liters.target,
                 packagingLoadedToWarehouse: false,
-                packagedItems: JSON.parse(JSON.stringify(recipe.packagedItems)).map((p: any) => ({ ...p, formatLiters: 0, quantityUsed: 0, quantityGood: 0 }))
+                packagedItems: JSON.parse(JSON.stringify(recipe.packagedItems)).map((p: any) => ({ ...p, quantityGood: 0 }))
             },
             qualityControlLog: {
                 sensoryPanelLogs: [],
@@ -273,6 +240,11 @@ const App: React.FC = () => {
         toast.success(`${itemsToLoad.length} item(s) loaded into warehouse.`);
         handleNavigate(Page.Warehouse);
     }
+    const handleLoadFinishedGoods = (itemsToLoad: Omit<WarehouseItem, 'id'>[]) => {
+        const newItems = itemsToLoad.map(item => ({ ...item, id: generateUniqueId('wh_fg')}));
+        setWarehouseItems(prev => [...prev, ...newItems]);
+        toast.success(`${itemsToLoad.length} finished good item(s) loaded into warehouse.`);
+    }
      const handleUnloadWarehouseItems = (itemsToUnload: Omit<WarehouseItem, 'id'>[]) => {
         setWarehouseItems(currentItems => {
             const updatedItems = [...currentItems];
@@ -289,8 +261,8 @@ const App: React.FC = () => {
         const currentPage = typeof page === 'string' ? page : page.page;
         if(currentPage === Page.WarehouseFinishedGoods) {
             handleNavigate(Page.WarehouseFinishedGoods);
-        } else {
-            handleNavigate(Page.Warehouse);
+        } else if (currentPage !== Page.Batches) { // Avoid navigating away from the batch page
+             handleNavigate(Page.Warehouse);
         }
     }
 
@@ -391,6 +363,7 @@ const App: React.FC = () => {
                                     onBack={() => handleNavigate(Page.Batches)} 
                                     onSave={handleSaveBatch}
                                     onUnloadItems={handleUnloadWarehouseItems}
+                                    onLoadFinishedGoods={handleLoadFinishedGoods}
                                 />;
                     }
                 }

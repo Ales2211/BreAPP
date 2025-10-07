@@ -1,9 +1,35 @@
+import React from 'react';
+
+export enum Page {
+    Dashboard = 'Dashboard',
+    Batches = 'Batches',
+    Calendar = 'Calendar',
+    QualityControl = 'QualityControl',
+    Recipes = 'Recipes',
+    Warehouse = 'Warehouse',
+    WarehouseFinishedGoods = 'WarehouseFinishedGoods',
+    Items = 'Items',
+    Suppliers = 'Suppliers',
+    Locations = 'Locations',
+    Analysis = 'Analysis',
+    ProductionPlan = 'ProductionPlan',
+    Tools = 'Tools',
+    Settings = 'Settings',
+    Orders = 'Orders',
+    Customers = 'Customers',
+}
+
 export type Unit = 'Kg' | 'g' | 'Lt' | 'pcs';
+
+export interface Category {
+    id: string;
+    name: string;
+    parentCategoryId?: string;
+}
 
 export interface Location {
     id: string;
     name: string;
-    // Fix: Updated Location type to use specific keys to avoid translation conflicts.
     type: 'Tank' | 'LocationType_Warehouse' | 'LocationType_Other';
 }
 
@@ -28,40 +54,16 @@ export interface Customer {
     notes?: string;
 }
 
-export interface OrderItem {
-    id: string;
-    masterItemId: string; // Finished good master item
-    quantity: number;
-    pricePerUnit: number; // Price at the time of order
-}
-
-export interface Order {
-    id: string;
-    customerId: string;
-    orderNumber: string;
-    orderDate: string;
-    requiredDate: string;
-    status: 'Draft' | 'Confirmed' | 'Shipped' | 'Completed' | 'Canceled';
-    items: OrderItem[];
-    notes?: string;
-}
-
-
-export interface Category {
-    id: string;
-    name: string;
-    parentCategoryId?: string;
-}
-
 export interface MasterItem {
     id: string;
     name: string;
     categoryId: string;
     unit: Unit;
-    format?: number;
+    format?: number; // e.g., 25 for a 25Kg sack
+    containerVolumeL?: number; // For finished goods, e.g., 0.44 for a can
     defaultSupplierId?: string;
-    purchaseCost?: number; // Cost per unit for raw materials
-    salePrice?: number;    // Price per unit for finished goods
+    purchaseCost?: number; // Cost per unit
+    salePrice?: number; // Price per unit
     reorderPoint?: number;
 }
 
@@ -71,10 +73,12 @@ export interface WarehouseItem {
     lotNumber: string;
     quantity: number;
     locationId: string;
-    expiryDate: string;
-    documentNumber: string;
-    arrivalDate: string;
+    arrivalDate: string; // YYYY-MM-DD
+    expiryDate?: string; // YYYY-MM-DD
+    documentNumber?: string; // e.g., DDT or invoice number
 }
+
+// --- Recipe-related types ---
 
 export interface Ingredient {
     id: string;
@@ -84,19 +88,19 @@ export interface Ingredient {
 
 export interface BoilWhirlpoolIngredient extends Ingredient {
     type: 'Boil' | 'Whirlpool';
-    timing: number; // minutes
-    temperature?: number; // celsius, for whirlpool
+    timing: number; // minutes from start of boil
+    temperature?: number; // for whirlpool
 }
 
 export interface TankIngredient extends Ingredient {
-    day: number;
+    day: number; // day of fermentation to add
 }
 
 export interface MashStep {
     id: string;
-    type: 'Infusion' | 'Decoction' | 'Temperature';
     temperature: number;
     duration: number;
+    type: 'Infusion' | 'Decoction' | 'Temperature';
 }
 
 export interface FermentationStep {
@@ -108,18 +112,10 @@ export interface FermentationStep {
 }
 
 export interface PackagedItemLink {
-    id:string;
-    masterItemId: string; // Finished good master item
+    id: string;
+    masterItemId: string;
 }
 
-export interface PackagedItemActual extends PackagedItemLink {
-    formatLiters?: number;
-    quantityUsed?: number;
-    quantityGood?: number;
-}
-
-
-// --- Quality Control Types ---
 export interface QualityControlValueSpec {
     target: number;
     min?: number;
@@ -132,44 +128,15 @@ export interface QualityControlSpecification {
     abv: QualityControlValueSpec;
     ibu: QualityControlValueSpec;
     liters: QualityControlValueSpec;
-    finalPh?: QualityControlValueSpec;
     preFermentationPh?: QualityControlValueSpec;
+    finalPh?: QualityControlValueSpec;
 }
-
-export interface SensoryPanelLog {
-    id: string;
-    date: string;
-    panelistName: string;
-    aromaNotes?: string;
-    flavorNotes?: string;
-    appearanceScore?: number; // e.g., 1-5
-    aromaScore?: number;
-    flavorScore?: number;
-    mouthfeelScore?: number;
-    overallScore?: number;
-    notes?: string;
-}
-
-export interface LabAnalysisLog {
-    id: string;
-    date: string;
-    diacetylPpb?: number;
-    vdkPpb?: number;
-    microbiologyTestResult?: 'Pass' | 'Fail' | 'Pending';
-    notes?: string;
-}
-
-export interface QualityControlLog {
-    sensoryPanelLogs: SensoryPanelLog[];
-    labAnalysisLogs: LabAnalysisLog[];
-}
-
 
 export interface Recipe {
     id: string;
     name: string;
     style: string;
-    shelfLifeDays?: number;
+    shelfLifeDays: number;
     qualityControlSpec: QualityControlSpecification;
     mashIngredients: Ingredient[];
     boilWhirlpoolIngredients: BoilWhirlpoolIngredient[];
@@ -177,67 +144,75 @@ export interface Recipe {
     mashSteps: MashStep[];
     fermentationSteps: FermentationStep[];
     packagedItems: PackagedItemLink[];
-    processParameters: ProcessParameters;
+    processParameters: {
+        mashWaterMainsL: number;
+        mashWaterMainsMicroSiemens: number;
+        mashWaterRoL: number;
+        mashWaterRoMicroSiemens: number;
+        spargeWaterL: number;
+        spargeWaterMicroSiemens: number;
+        spargeWaterPh: number;
+        maltMilling: number;
+        expectedMashPh: number;
+        expectedIodineTime: number;
+        transferDuration: number;
+        recirculationDuration: number;
+        filtrationDuration: number;
+        firstWortPlato: number;
+        firstWortPh: number;
+        lastWortPlato: number;
+        lastWortPh: number;
+        preBoilLiters: number;
+        preBoilPlato: number;
+        preBoilPh: number;
+        postBoilLiters: number;
+        postBoilPlato: number;
+        postBoilPh: number;
+        boilDuration: number;
+        whirlpoolDuration: number;
+        whirlpoolRestDuration: number;
+        coolingDuration: number;
+    };
     notes?: string;
 }
 
-export interface ProcessParameters {
-    mashWaterMainsL: number;
-    mashWaterMainsMicroSiemens: number;
-    mashWaterRoL: number;
-    mashWaterRoMicroSiemens: number;
-    spargeWaterL: number;
-    spargeWaterMicroSiemens: number;
-    spargeWaterPh: number;
-    maltMilling: number;
-    expectedMashPh: number;
-    expectedIodineTime: number;
-    transferDuration: number;
-    recirculationDuration: number;
-    filtrationDuration: number;
-    firstWortPlato: number;
-    firstWortPh: number;
-    lastWortPlato: number;
-    lastWortPh: number;
-    preBoilLiters: number;
-    preBoilPlato: number;
-    preBoilPh: number;
-    postBoilLiters: number;
-    postBoilPlato: number;
-    postBoilPh: number;
-    boilDuration: number;
-    whirlpoolDuration: number;
-    whirlpoolRestDuration: number;
-    coolingDuration: number;
+// --- Brew Sheet (Batch) related types ---
+
+export interface LotAssignment {
+    id: string;
+    lotNumber: string;
+    quantity: number;
 }
 
-
-// Interfaces for BrewSheet actual logs
 export interface ActualIngredient {
     id: string;
     masterItemId: string;
-    quantity?: number;
-    lotNumber?: string;
+    lotAssignments: LotAssignment[];
+}
+export interface ActualBoilWhirlpoolIngredient extends BoilWhirlpoolIngredient {
+    lotAssignments: LotAssignment[];
+}
+export interface ActualTankIngredient extends TankIngredient {
+    lotAssignments: LotAssignment[];
 }
 
-export interface ActualBoilWhirlpoolIngredient extends ActualIngredient {
-    type: 'Boil' | 'Whirlpool';
-    timing: number;
-    temperature?: number;
+export interface ActualMashStep extends MashStep {
+    actualStartTime?: string;
+    actualEndTime?: string;
+    actualTemperature?: number;
 }
-
-export interface ActualTankIngredient extends ActualIngredient {
-    day: number;
-}
-
 
 export interface LogEntry {
     id: string;
-    timestamp: string;
-    temperature?: number;
-    gravity?: number;
-    ph?: number;
-    notes?: string;
+    timestamp: string; // ISO string
+    temperature: number;
+    gravity: number;
+    ph: number;
+    notes: string;
+}
+
+export interface PackagedItemActual extends PackagedItemLink {
+    quantityGood?: number;
 }
 
 export interface BrewSheet {
@@ -246,56 +221,83 @@ export interface BrewSheet {
     beerName: string;
     lot: string;
     cookNumber: number;
-    cookDate: string;
+    cookDate: string; // YYYY-MM-DD
     fermenterId: string;
     status: 'Planned' | 'In Progress' | 'Fermenting' | 'Packaged' | 'Completed';
+    unloadStatus: {
+        mash: boolean;
+        boil: boolean;
+        fermentation: boolean;
+    };
+
     mashLog: {
         expected: {
             ingredients: Ingredient[];
             steps: MashStep[];
-            mashPh?: number;
-            expectedIodineTime?: number;
+            mashPh: number;
+            expectedIodineTime: number;
+            mashWaterMainsL: number;
+            mashWaterMainsMicroSiemens: number;
+            mashWaterRoL: number;
+            mashWaterRoMicroSiemens: number;
+            maltMilling: number;
         };
         actual: {
             ingredients: ActualIngredient[];
-            steps: MashStep[];
+            steps: ActualMashStep[]; 
             mashPh?: number;
             iodineTime?: number;
+            mashWaterMainsL?: number;
+            mashWaterMainsMicroSiemens?: number;
+            mashWaterRoL?: number;
+            mashWaterRoMicroSiemens?: number;
+            maltMilling?: number;
         };
     };
+
     lauterLog: {
         expected: {
-            transferDuration?: number;
-            recirculationDuration?: number;
-            filtrationDuration?: number;
-            firstWortPlato?: number;
-            firstWortPh?: number;
-            lastWortPlato?: number;
-            lastWortPh?: number;
+            transferDuration: number;
+            recirculationDuration: number;
+            filtrationDuration: number;
+            firstWortPlato: number;
+            firstWortPh: number;
+            lastWortPlato: number;
+            lastWortPh: number;
+            spargeWaterL: number;
+            spargeWaterMicroSiemens: number;
+            spargeWaterPh: number;
         };
         actual: {
-            transferDuration?: number;
-            recirculationDuration?: number;
-            filtrationDuration?: number;
+            transferStartTime?: string;
+            transferEndTime?: string;
+            recirculationStartTime?: string;
+            recirculationEndTime?: string;
+            filtrationStartTime?: string;
+            filtrationEndTime?: string;
             firstWortPlato?: number;
             firstWortPh?: number;
             lastWortPlato?: number;
             lastWortPh?: number;
+            spargeWaterL?: number;
+            spargeWaterMicroSiemens?: number;
+            spargeWaterPh?: number;
         };
     };
+
     boilLog: {
         expected: {
             ingredients: BoilWhirlpoolIngredient[];
-            preBoilLiters?: number;
-            preBoilPlato?: number;
-            preBoilPh?: number;
-            boilDuration?: number;
-            postBoilLiters?: number;
-            postBoilPlato?: number;
-            postBoilPh?: number;
-            whirlpoolDuration?: number;
-            whirlpoolRestDuration?: number;
-            coolingDuration?: number;
+            preBoilLiters: number;
+            preBoilPlato: number;
+            preBoilPh: number;
+            boilDuration: number;
+            postBoilLiters: number;
+            postBoilPlato: number;
+            postBoilPh: number;
+            whirlpoolDuration: number;
+            whirlpoolRestDuration: number;
+            coolingDuration: number;
         };
         actual: {
             ingredients: ActualBoilWhirlpoolIngredient[];
@@ -307,15 +309,20 @@ export interface BrewSheet {
             postBoilLiters?: number;
             postBoilPlato?: number;
             postBoilPh?: number;
-            whirlpoolDuration?: number;
-            whirlpoolRestDuration?: number;
-            coolingDuration?: number;
+            whirlpoolStartTime?: string;
+            whirlpoolEndTime?: string;
+            whirlpoolRestStartTime?: string;
+            whirlpoolRestEndTime?: string;
+            coolingStartTime?: string;
+            coolingEndTime?: string;
             coolingWashingCounterStart?: number;
+            // Fix: Corrected typo from coolingWastingCounterEnd to coolingWashingCounterEnd.
             coolingWashingCounterEnd?: number;
             coolingWortCounterStart?: number;
             coolingWortCounterEnd?: number;
         };
     };
+
     fermentationLog: {
         expected: {
             steps: FermentationStep[];
@@ -326,34 +333,41 @@ export interface BrewSheet {
             logEntries: LogEntry[];
         };
     };
+
     packagingLog: {
         packagingDate?: string;
         bestBeforeDate?: string;
         tankPressure?: number;
         saturation?: string;
         packagedItems: PackagedItemActual[];
-        summaryExpectedLiters?: number;
-        notes?: string;
+        summaryExpectedLiters: number;
         packagingLoadedToWarehouse: boolean;
+        notes?: string;
     };
-    qualityControlLog?: QualityControlLog;
+    
+    qualityControlLog: {
+        // Define as needed later
+        sensoryPanelLogs: any[];
+        labAnalysisLogs: any[];
+    };
 }
 
-export enum Page {
-    Dashboard = 'Dashboard',
-    Batches = 'Batches',
-    Calendar = 'Calendar',
-    Recipes = 'Recipes',
-    Warehouse = 'Warehouse',
-    WarehouseFinishedGoods = 'WarehouseFinishedGoods',
-    Items = 'Items',
-    Suppliers = 'Suppliers',
-    Locations = 'Locations',
-    ProductionPlan = 'ProductionPlan',
-    Analysis = 'Analysis',
-    Tools = 'Tools',
-    Settings = 'Settings',
-    Orders = 'Orders',
-    Customers = 'Customers',
-    QualityControl = 'QualityControl',
+// --- Order-related types ---
+
+export interface OrderItem {
+    id: string;
+    masterItemId: string;
+    quantity: number;
+    pricePerUnit: number;
+}
+
+export interface Order {
+    id: string;
+    customerId: string;
+    orderNumber: string;
+    orderDate: string; // YYYY-MM-DD
+    requiredDate: string; // YYYY-MM-DD
+    status: 'Draft' | 'Confirmed' | 'Shipped' | 'Completed' | 'Canceled';
+    items: OrderItem[];
+    notes?: string;
 }
