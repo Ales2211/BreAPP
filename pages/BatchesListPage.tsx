@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { BrewSheet, Recipe, Location } from '../types';
 import EmptyState from '../components/ui/EmptyState';
@@ -14,7 +13,7 @@ interface BatchesListPageProps {
     recipes: Recipe[];
     locations: Location[];
     onSelectBatch: (batch: BrewSheet) => void;
-    onCreateBatch: (recipeId: string, details: { lot: string; cookDate: string; cookNumber: number; fermenterId: string; }) => void;
+    onCreateBatch: (recipeId: string, details: { cookDate: string; fermenterId: string; }) => void;
     onDeleteBatch: (batchId: string) => void;
 }
 
@@ -75,13 +74,11 @@ const CreateBatchModal: React.FC<{
     recipes: Recipe[],
     locations: Location[],
     onClose: () => void, 
-    onCreate: (recipeId: string, details: { lot: string; cookDate: string; cookNumber: number; fermenterId: string; }) => void,
+    onCreate: (recipeId: string, details: { cookDate: string; fermenterId: string; }) => void,
     t: (key: string) => string 
 }> = ({ isOpen, recipes, locations, onClose, onCreate, t }) => {
     const [selectedRecipe, setSelectedRecipe] = useState(recipes.length > 0 ? recipes[0].id : '');
-    const [lot, setLot] = useState('');
     const [cookDate, setCookDate] = useState(new Date().toISOString().split('T')[0]);
-    const [cookNumber, setCookNumber] = useState('1');
     
     const tanks = useMemo(() => locations.filter(l => l.type === 'Tank'), [locations]);
     const [fermenterId, setFermenterId] = useState(tanks.length > 0 ? tanks[0].id : '');
@@ -90,9 +87,7 @@ const CreateBatchModal: React.FC<{
         if (isOpen) {
             // Reset form to defaults when modal opens
             setSelectedRecipe(recipes.length > 0 ? recipes[0].id : '');
-            setLot('');
             setCookDate(new Date().toISOString().split('T')[0]);
-            setCookNumber('1');
             const currentTanks = locations.filter(l => l.type === 'Tank');
             setFermenterId(currentTanks.length > 0 ? currentTanks[0].id : '');
         }
@@ -100,9 +95,8 @@ const CreateBatchModal: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const numericCookNumber = parseInt(cookNumber, 10);
-        if (!selectedRecipe || !lot || !cookDate || !fermenterId || isNaN(numericCookNumber)) return;
-        onCreate(selectedRecipe, { lot, cookDate, cookNumber: numericCookNumber, fermenterId });
+        if (!selectedRecipe || !cookDate || !fermenterId) return;
+        onCreate(selectedRecipe, { cookDate, fermenterId });
         onClose();
     };
 
@@ -120,14 +114,12 @@ const CreateBatchModal: React.FC<{
                     <Select label={t('Recipe')} value={selectedRecipe} onChange={e => setSelectedRecipe(e.target.value)}>
                         {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </Select>
-                    <Input label={t('Lot')} value={lot} onChange={e => setLot(e.target.value)} required />
-                    <Input label={t('Cook No.')} type="number" value={cookNumber} onChange={e => setCookNumber(e.target.value)} required />
                     <Input label={t('Cook Date')} type="date" value={cookDate} onChange={e => setCookDate(e.target.value)} required />
                     <Select label={t('Fermenter')} value={fermenterId} onChange={e => setFermenterId(e.target.value)} required>
                         {tanks.map(tank => <option key={tank.id} value={tank.id}>{tank.name}</option>)}
                     </Select>
                     <div className="flex justify-end space-x-4 pt-4">
-                        <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-600 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
+                        <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
                         <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg">{t('Create')}</button>
                     </div>
                 </form>

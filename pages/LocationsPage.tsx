@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Location } from '../types';
 import EmptyState from '../components/ui/EmptyState';
 import { PlusCircleIcon, TrashIcon, BuildingStoreIcon } from '../components/Icons';
@@ -20,29 +20,43 @@ const LocationModal: React.FC<{
     onSave: (location: Location | Omit<Location, 'id'>) => void;
     t: (key: string) => string;
 }> = ({ isOpen, location, onClose, onSave, t }) => {
-    // Fix: Default type is now the more specific 'LocationType_Warehouse'.
-    const [formData, setFormData] = useState(location || { name: '', type: 'LocationType_Warehouse' as Location['type'] });
+    const [formData, setFormData] = useState(location || { name: '', type: 'LocationType_Warehouse' as Location['type'], grossVolumeL: undefined });
 
     useEffect(() => {
         if (isOpen) {
-            const defaultData = { name: '', type: 'LocationType_Warehouse' as Location['type'] };
+            const defaultData = { name: '', type: 'LocationType_Warehouse' as Location['type'], grossVolumeL: undefined };
             setFormData(location || defaultData);
         }
     }, [isOpen, location]);
-
+    
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        if (name === 'name') {
-            setFormData(prev => ({...prev, name: value}));
-        } else if (name === 'type') {
-            setFormData(prev => ({...prev, type: value as Location['type']}));
-        }
+        setFormData(prev => {
+            const newState = { ...prev, [name]: value };
+            if (name === 'type' && value !== 'Tank') {
+                // @ts-ignore
+                delete newState.grossVolumeL;
+            }
+            // @ts-ignore
+            return newState;
+        });
     };
+
+    const handleNumericChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value === '' ? undefined : parseFloat(value) }));
+    };
+
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.name) return;
-        onSave(formData);
+        
+        const { grossVolumeL, ...rest } = formData;
+        // @ts-ignore
+        const locationToSave = formData.type === 'Tank' ? { ...rest, grossVolumeL } : { ...rest, grossVolumeL: undefined };
+
+        onSave(locationToSave);
         onClose();
     };
 
@@ -60,12 +74,23 @@ const LocationModal: React.FC<{
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <Input label={t('Location Name')} name="name" value={formData.name} onChange={handleChange} required />
-                    {/* Fix: Update select options to use specific keys for location types to avoid translation conflicts. */}
                     <Select label={t('Location Type')} name="type" value={formData.type} onChange={handleChange}>
                         <option value="LocationType_Warehouse">{t('LocationType_Warehouse')}</option>
                         <option value="Tank">{t('Tank')}</option>
                         <option value="LocationType_Other">{t('LocationType_Other')}</option>
                     </Select>
+                    {formData.type === 'Tank' && (
+                        <Input
+                            label={t('Gross Volume (L)')}
+                            name="grossVolumeL"
+                            type="number"
+                            // @ts-ignore
+                            value={formData.grossVolumeL || ''}
+                            onChange={handleNumericChange}
+                            min="1"
+                            required
+                        />
+                    )}
                     <div className="flex justify-end space-x-4 pt-4">
                         <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
                         <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg">{t('Save')}</button>
@@ -101,7 +126,7 @@ const LocationCard: React.FC<{ location: Location, onEdit: () => void, onDelete:
             <div className="flex justify-between items-start">
                 <div>
                     <h3 className="text-xl font-bold text-color-accent">{location.name}</h3>
-                    <p className="text-sm text-gray-500">{t(location.type)}</p>
+                    <p className="text-sm text-gray-500">{t(location.type)}{location.grossVolumeL ? ` - ${location.grossVolumeL} L` : ''}</p>
                 </div>
                 <div className="flex space-x-2">
                     <button
@@ -119,11 +144,20 @@ const LocationCard: React.FC<{ location: Location, onEdit: () => void, onDelete:
 
 const LocationsPage: React.FC<LocationsPageProps> = ({ locations, onSaveLocation, onDeleteLocation }) => {
     const { t } = useTranslation();
+    const [activeTab, setActiveTab] = useState<'warehouse' | 'tank'>('warehouse');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [locationToDelete, setLocationToDelete] = useState<Location | null>(null);
 
+    const { warehouseLocations, tankLocations } = useMemo(() => {
+        const warehouses = locations.filter(l => l.type !== 'Tank').sort((a,b) => a.name.localeCompare(b.name));
+        const tanks = locations.filter(l => l.type === 'Tank').sort((a,b) => a.name.localeCompare(b.name));
+        return { warehouseLocations: warehouses, tankLocations: tanks };
+    }, [locations]);
+
+    const itemsToShow = activeTab === 'warehouse' ? warehouseLocations : tankLocations;
+    
     const handleNewLocation = () => {
         setSelectedLocation(null);
         setIsModalOpen(true);
@@ -151,6 +185,11 @@ const LocationsPage: React.FC<LocationsPageProps> = ({ locations, onSaveLocation
         setIsConfirmModalOpen(false);
         setLocationToDelete(null);
     };
+    
+    const tabs = [
+        { key: 'warehouse', label: 'Warehouse Management' },
+        { key: 'tank', label: 'Tank Management' },
+    ];
 
     return (
         <div className="h-full flex flex-col">
@@ -162,16 +201,35 @@ const LocationsPage: React.FC<LocationsPageProps> = ({ locations, onSaveLocation
                 title={t('Delete Location')}
                 message={`${t('Are you sure you want to delete location')} ${locationToDelete?.name}? ${t('This action cannot be undone.')}`}
             />
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-2 flex-shrink-0">
                 <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Locations')}</h1>
                 <button onClick={handleNewLocation} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
                     <PlusCircleIcon className="w-6 h-6" />
                     <span>{t('New Location')}</span>
                 </button>
             </div>
-            {locations.length > 0 ? (
+
+            <div className="border-b border-color-border mb-6">
+                <nav className="flex space-x-4">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key as 'warehouse' | 'tank')}
+                            className={`py-3 px-1 text-sm font-semibold transition-colors ${
+                                activeTab === tab.key
+                                ? 'border-b-2 border-color-accent text-color-accent'
+                                : 'text-gray-500 hover:text-color-text'
+                            }`}
+                        >
+                            {t(tab.label)}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+            
+            {itemsToShow.length > 0 ? (
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                     {locations.map(loc => (
+                     {itemsToShow.map(loc => (
                         <LocationCard 
                             key={loc.id}
                             location={loc}
@@ -185,8 +243,8 @@ const LocationsPage: React.FC<LocationsPageProps> = ({ locations, onSaveLocation
                 <div className="flex-1 flex items-center justify-center">
                     <EmptyState 
                         icon={<BuildingStoreIcon className="w-12 h-12"/>}
-                        title={t('No locations defined')}
-                        message={t('Add your first warehouse or tank location.')}
+                        title={activeTab === 'warehouse' ? t('No warehouses defined') : t('No tanks defined')}
+                        message={activeTab === 'warehouse' ? t('Add your first warehouse location.') : t('Add your first tank location.')}
                         action={{
                             text: t('Create New Location'),
                             onClick: handleNewLocation

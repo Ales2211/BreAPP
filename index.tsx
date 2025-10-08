@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// Fix: Corrected import path for App component.
+// Fix: Corrected import path for App component from 'App' to './App'.
 import App from './App';
 import { LanguageProvider } from './hooks/useTranslation';
 import { ToastProvider } from './hooks/useToast';

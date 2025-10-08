@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Recipe, MasterItem, Category, Ingredient, BoilWhirlpoolIngredient, MashStep, FermentationStep, TankIngredient, PackagedItemLink, QualityControlSpecification, QualityControlValueSpec } from '../types';
+import { Recipe, MasterItem, Category, Ingredient, BoilWhirlpoolIngredient, MashStep, FermentationStep, TankIngredient, PackagedItemLink, QualityControlSpecification, QualityControlValueSpec, AdministrationSettings } from '../types';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import Select from '../components/ui/Select';
-import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MaltIcon, HopsIcon, YeastIcon, BookOpenIcon, WrenchIcon, ThermometerIcon, DropletIcon } from '../components/Icons';
+import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MaltIcon, HopsIcon, YeastIcon, BookOpenIcon, WrenchIcon, ThermometerIcon, DropletIcon, BottleIcon } from '../components/Icons';
 import { useTranslation } from '../hooks/useTranslation';
 
 const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -23,6 +24,7 @@ const getBlankRecipe = (): Omit<Recipe, 'id'> => ({
     mashIngredients: [],
     boilWhirlpoolIngredients: [],
     tankIngredients: [],
+    packagingIngredients: [],
     mashSteps: [],
     fermentationSteps: [],
     packagedItems: [],
@@ -36,6 +38,10 @@ const getBlankRecipe = (): Omit<Recipe, 'id'> => ({
         preBoilLiters: 0, preBoilPlato: 0, preBoilPh: 0,
         postBoilLiters: 0, postBoilPlato: 0, postBoilPh: 0,
         boilDuration: 0, whirlpoolDuration: 0, whirlpoolRestDuration: 0, coolingDuration: 0,
+        packagingYield: 80,
+    },
+    additionalCosts: {
+        other: 0,
     },
     notes: ''
 });
@@ -48,7 +54,7 @@ interface IngredientPanelProps<T extends Ingredient> {
     onUpdate: (items: T[]) => void;
     t: (key: string) => string;
     validCategoryNames: string[];
-    panelType: 'mash' | 'boil' | 'tank';
+    panelType: 'mash' | 'boil' | 'tank' | 'packaging';
     totalWeightForPercentage?: number;
     categoryForPercentage?: string;
     litersForGl?: number;
@@ -62,10 +68,13 @@ type IngredientRowProps<T extends Ingredient> = {
     onRemove: (id: string) => void;
 } & Omit<IngredientPanelProps<T>, 'items' | 'onUpdate'>;
 
-const IngredientRow = <T extends Ingredient>({ 
+// Fix: The generic functional component was causing a TypeScript error with the `key` prop when wrapped in React.memo.
+// Using a named function expression inside React.memo allows TypeScript to correctly infer the generic types
+// and handle the `key` prop without it being part of the component's own props, thus resolving the error.
+const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({ 
     item, index, onUpdate, onRemove, masterItems, categories, t, validCategoryNames, panelType,
     totalWeightForPercentage, categoryForPercentage, litersForGl 
-}: IngredientRowProps<T>) => {
+}: IngredientRowProps<T>) {
     
     const [searchTerm, setSearchTerm] = useState('');
     const [isFocused, setIsFocused] = useState(false);
@@ -112,13 +121,14 @@ const IngredientRow = <T extends Ingredient>({
     const gridConfig = {
         mash: 'grid-cols-12',
         boil: 'grid-cols-12',
-        tank: 'grid-cols-12'
+        tank: 'grid-cols-12',
+        packaging: 'grid-cols-12'
     };
 
     return (
         <div className={`grid ${gridConfig[panelType]} gap-x-2 gap-y-1 items-start bg-color-background/50 p-2 rounded-md`}>
             <div className={`relative ${
-                panelType === 'mash' ? 'col-span-12 md:col-span-8' :
+                panelType === 'mash' || panelType === 'packaging' ? 'col-span-12 md:col-span-8' :
                 panelType === 'boil' ? 'col-span-12 md:col-span-4' :
                 'col-span-12 md:col-span-7'
             }`}>
@@ -184,18 +194,19 @@ const IngredientRow = <T extends Ingredient>({
             </div>
         </div>
     );
-}
-
+});
 
 interface RecipeFormPageProps {
   recipe: Recipe | null;
   masterItems: MasterItem[];
   categories: Category[];
-  onSave: (recipe: Recipe) => void;
+  administrationSettings: AdministrationSettings;
+  // Fix: Update the onSave prop type to accept both new and existing recipes.
+  onSave: (recipe: Recipe | Omit<Recipe, 'id'>) => void;
   onBack: () => void;
 }
 
-const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, categories, onSave, onBack }) => {
+const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, categories, administrationSettings, onSave, onBack }) => {
     const { t } = useTranslation();
     const [formData, setFormData] = useState<Recipe | Omit<Recipe, 'id'>>(() => recipe || getBlankRecipe());
     const [activeTab, setActiveTab] = useState('General');
@@ -223,6 +234,12 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
         setFormData(prev => ({ ...prev, processParameters: { ...prev.processParameters, [name]: parsedValue } }));
     };
 
+    const handleAdditionalCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        const parsedValue = (value !== '') ? parseFloat(value) : 0;
+        setFormData(prev => ({ ...prev, additionalCosts: { ...prev.additionalCosts, [name]: parsedValue } }));
+    };
+
     const handleUpdateList = <T,>(key: keyof Recipe, newList: T[]) => {
         setFormData(prev => ({...prev, [key]: newList} as unknown as Recipe | Omit<Recipe, 'id'>));
     };
@@ -238,22 +255,91 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
 
     const handleSave = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData as Recipe);
+        // Fix: Removed incorrect type assertion. `formData` is already the correct type for `onSave`.
+        onSave(formData);
     };
     
     const totalGristWeight = useMemo(() => formData.mashIngredients.reduce((sum, ing) => sum + ing.quantity, 0), [formData.mashIngredients]);
-    const { recipeCost, costPerLiter } = useMemo(() => {
-        const totalCost = [...formData.mashIngredients, ...formData.boilWhirlpoolIngredients, ...formData.tankIngredients]
+    
+    const { 
+        rawMaterialCost, 
+        packagingCost, 
+        otherRecipeCosts,
+        operationalCostsPerBatch,
+        calculatedExciseDuty, 
+        grandTotalCost, 
+        costPerLiter 
+    } = useMemo(() => {
+        // Calculate global operational costs per batch
+        const { 
+            annualBatches, annualManpowerCost, annualGasCost, annualRentCost, annualWaterCost,
+            annualDetergentsCost, annualCo2Cost 
+        } = administrationSettings;
+        const opCostsPerBatch = annualBatches > 0 
+            ? (
+                (annualManpowerCost || 0) + 
+                (annualGasCost || 0) + 
+                (annualRentCost || 0) + 
+                (annualWaterCost || 0) +
+                (annualDetergentsCost || 0) +
+                (annualCo2Cost || 0)
+              ) / annualBatches 
+            : 0;
+            
+        const rmCost = [...formData.mashIngredients, ...formData.boilWhirlpoolIngredients, ...formData.tankIngredients]
             .reduce((acc, ing) => {
                 const item = masterItems.find(mi => mi.id === ing.masterItemId);
                 return acc + (ing.quantity * (item?.purchaseCost || 0));
             }, 0);
-        const targetLiters = formData.qualityControlSpec?.liters?.target || 0;
-        const cpl = targetLiters > 0 ? totalCost / targetLiters : 0;
-        return { recipeCost: totalCost, costPerLiter: cpl };
-    }, [formData, masterItems]);
 
-    const tabs = ['General', 'Raw Materials', 'Water', 'Process'];
+        const pkgCost = formData.packagingIngredients.reduce((acc, ing) => {
+            const item = masterItems.find(mi => mi.id === ing.masterItemId);
+            return acc + (ing.quantity * (item?.purchaseCost || 0));
+        }, 0);
+        
+        const otherCosts = Object.values(formData.additionalCosts || {}).reduce((sum: number, cost) => sum + (Number(cost) || 0), 0);
+        
+        const packagedLiters = (formData.qualityControlSpec.liters.target || 0) * ((formData.processParameters.packagingYield || 0) / 100);
+        
+        const exciseDuty = (formData.qualityControlSpec.og.target || 0) * (packagedLiters / 100) * (administrationSettings.exciseDutyRate || 0);
+
+        const grandTotal = rmCost + pkgCost + otherCosts + opCostsPerBatch + exciseDuty;
+        
+        const cpl = packagedLiters > 0 ? grandTotal / packagedLiters : 0;
+        
+        return { 
+            rawMaterialCost: rmCost,
+            packagingCost: pkgCost,
+            otherRecipeCosts: otherCosts,
+            operationalCostsPerBatch: opCostsPerBatch,
+            calculatedExciseDuty: exciseDuty,
+            grandTotalCost: grandTotal,
+            costPerLiter: cpl 
+        };
+    }, [formData, masterItems, administrationSettings]);
+
+    const tabs = ['General', 'Raw Materials', 'Water', 'Process', 'Finished Product', 'Costs'];
+    
+    const targets = [
+        { key: 'og', labelKey: 'OriginalGravity', unit: '°P', step: 0.1 },
+        { key: 'fg', labelKey: 'FinalGravity', unit: '°P', step: 0.1 },
+        { key: 'abv', labelKey: 'AlcoholByVolume', unit: '%', step: 0.1 },
+        { key: 'ibu', labelKey: 'Bitterness', unit: 'IBU', step: 1 },
+        { key: 'liters', labelKey: 'VolumeInTank', unit: 'L', step: 1 },
+        { key: 'preFermentationPh', labelKey: 'PreFermentationpH', unit: 'pH', step: 0.01 },
+        { key: 'finalPh', labelKey: 'FinalpH', unit: 'pH', step: 0.01 },
+    ];
+    
+    const allIngredientsForCosting = useMemo(() => {
+        return [
+            ...formData.mashIngredients.map(i => ({ ...i, stage: 'Mash' })),
+            ...formData.boilWhirlpoolIngredients.map(i => ({ ...i, stage: 'Boil & Whirlpool' })),
+            ...formData.tankIngredients.map(i => ({ ...i, stage: 'Fermentation' }))
+        ];
+    }, [formData.mashIngredients, formData.boilWhirlpoolIngredients, formData.tankIngredients]);
+    
+    const totalPackagingSplit = useMemo(() => formData.packagedItems.reduce((sum, item) => sum + (item.packagingSplit || 0), 0), [formData.packagedItems]);
+
 
     return (
         <form onSubmit={handleSave} className="h-full flex flex-col">
@@ -300,50 +386,52 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                                 <Input label={t('Shelf Life (days)')} name="shelfLifeDays" type="number" value={formData.shelfLifeDays || ''} onChange={handleChange} />
                             </div>
                         </Card>
-                         <Card title={t('Targets')} icon={<ThermometerIcon className="w-5 h-5"/>}>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-x-4 gap-y-2 items-end">
-                                <div className="hidden md:block font-semibold text-gray-500 text-sm"></div>
-                                <div className="hidden md:block font-semibold text-gray-500 text-sm text-center">{t('Target')}</div>
-                                <div className="hidden md:block font-semibold text-gray-500 text-sm text-center">Min / Max</div>
-                                {[
-                                    { key: 'og', label: 'OG (°P)', step: 0.1 }, { key: 'fg', label: 'FG (°P)', step: 0.1 },
-                                    { key: 'abv', label: 'ABV (%)', step: 0.1 }, { key: 'ibu', label: 'IBU', step: 1 },
-                                    { key: 'liters', label: 'Liters (L)', step: 1 }, { key: 'preFermentationPh', label: 'Pre-fermentation pH', step: 0.01 },
-                                    { key: 'finalPh', label: 'Final pH', step: 0.01 },
-                                ].map(({key, label, step}) => (
-                                    <React.Fragment key={key}>
-                                        <label className="font-medium self-center text-sm md:text-base mt-2 md:mt-0">{t(label)}</label>
-                                        <Input type="number" step={step} value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.target || ''} onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'target', e.target.value)} />
-                                        <div className="flex gap-2">
-                                            <Input type="number" step={step} value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.min ?? ''} placeholder={t('Min')} onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'min', e.target.value)} />
-                                            <Input type="number" step={step} value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.max ?? ''} placeholder={t('Max')} onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'max', e.target.value)} />
+                        <Card title={t('Targets')} icon={<ThermometerIcon className="w-5 h-5"/>}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {targets.map(({ key, labelKey, unit, step }) => (
+                                    <div key={key} className="bg-color-background/60 p-4 rounded-lg border border-color-border/30">
+                                        <label className="block text-base font-semibold text-color-secondary mb-3">{t(labelKey)}</label>
+                                        
+                                        <div className="relative mb-4">
+                                            <Input
+                                                type="number"
+                                                step={step}
+                                                value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.target || ''}
+                                                onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'target', e.target.value)}
+                                                className="text-center text-xl font-mono py-2.5"
+                                                aria-label={`${t('Target')} ${t(labelKey)}`}
+                                            />
+                                            <span className="absolute top-1/2 -translate-y-1/2 right-3 text-sm text-gray-400 pointer-events-none">{unit}</span>
                                         </div>
-                                    </React.Fragment>
-                                ))}
-                            </div>
-                        </Card>
-                        <Card title={t('Packaged Items')}>
-                            <div className="space-y-3">
-                                {formData.packagedItems.map((item, index) => (
-                                    <div key={item.id} className="flex items-center space-x-2 bg-color-background p-2 rounded-md">
-                                        <Select value={item.masterItemId} onChange={(e) => handleUpdateList('packagedItems', formData.packagedItems.map((p, i) => i === index ? { ...p, masterItemId: e.target.value } : p))} >
-                                            <option value="">{t('Select Item...')}</option>
-                                            {finishedGoodsMasterItems.map(mi => <option key={mi.id} value={mi.id}>{mi.name}</option>)}
-                                        </Select>
-                                        <button type="button" onClick={() => handleUpdateList('packagedItems', formData.packagedItems.filter(p => p.id !== item.id))} className="p-2 text-red-500 hover:text-red-400">
-                                            <TrashIcon className="w-5 h-5" />
-                                        </button>
+                        
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1 text-center">{t('Min')}</label>
+                                                <Input
+                                                    type="number"
+                                                    step={step}
+                                                    value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.min ?? ''}
+                                                    onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'min', e.target.value)}
+                                                    placeholder="-"
+                                                    className="text-center font-mono"
+                                                    aria-label={`${t('Min')} ${t(labelKey)}`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-gray-500 mb-1 text-center">{t('Max')}</label>
+                                                <Input
+                                                    type="number"
+                                                    step={step}
+                                                    value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.max ?? ''}
+                                                    onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'max', e.target.value)}
+                                                    placeholder="-"
+                                                    className="text-center font-mono"
+                                                    aria-label={`${t('Max')} ${t(labelKey)}`}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('packagedItems', [...formData.packagedItems, { id: generateId(), masterItemId: '' }])} className="mt-4 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Packaged Item')}</span>
-                            </button>
-                        </Card>
-                        <Card title={t('Cost Analysis')}>
-                            <div className="space-y-2">
-                                <div className="flex justify-between items-center text-lg"><span className="font-semibold text-gray-500">{t('Total Batch Cost')}</span><span className="font-bold text-color-accent">{recipeCost.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-lg"><span className="font-semibold text-gray-500">{t('Cost per Liter')}</span><span className="font-bold text-color-accent">{costPerLiter.toFixed(2)} €</span></div>
                             </div>
                         </Card>
                     </div>
@@ -430,6 +518,121 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                                 <div><h4 className="text-md font-semibold text-color-secondary mb-2 border-b border-color-border/30 pb-1">{t('Lauter')}</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><Input label={t('Transfer Duration (min)')} name="transferDuration" type="number" value={formData.processParameters.transferDuration} onChange={handleProcessParamChange} /><Input label={t('Recirculation Duration (min)')} name="recirculationDuration" type="number" value={formData.processParameters.recirculationDuration} onChange={handleProcessParamChange} /><Input label={t('Filtration Duration (min)')} name="filtrationDuration" type="number" value={formData.processParameters.filtrationDuration} onChange={handleProcessParamChange} /><Input label={t('First Wort (°P)')} name="firstWortPlato" type="number" step="0.1" value={formData.processParameters.firstWortPlato} onChange={handleProcessParamChange} /><Input label={t('First Wort pH')} name="firstWortPh" type="number" step="0.01" value={formData.processParameters.firstWortPh} onChange={handleProcessParamChange} /><Input label={t('Last Wort (°P)')} name="lastWortPlato" type="number" step="0.1" value={formData.processParameters.lastWortPlato} onChange={handleProcessParamChange} /><Input label={t('Last Wort pH')} name="lastWortPh" type="number" step="0.01" value={formData.processParameters.lastWortPh} onChange={handleProcessParamChange} /></div></div>
                                 <div><h4 className="text-md font-semibold text-color-secondary mb-2 border-b border-color-border/30 pb-1">{t('Boil & Cooling')}</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-4"><Input label={t('Pre-Boil (L)')} name="preBoilLiters" type="number" step="any" value={formData.processParameters.preBoilLiters} onChange={handleProcessParamChange} /><Input label={t('Pre-Boil (°P)')} name="preBoilPlato" type="number" step="0.1" value={formData.processParameters.preBoilPlato} onChange={handleProcessParamChange} /><Input label={t('Pre-boil pH')} name="preBoilPh" type="number" step="0.01" value={formData.processParameters.preBoilPh} onChange={handleProcessParamChange} /><Input label={t('Post-Boil (L)')} name="postBoilLiters" type="number" step="any" value={formData.processParameters.postBoilLiters} onChange={handleProcessParamChange} /><Input label={t('Post-Boil (°P)')} name="postBoilPlato" type="number" step="0.1" value={formData.processParameters.postBoilPlato} onChange={handleProcessParamChange} /><Input label={t('Post-Boil pH')} name="postBoilPh" type="number" step="0.01" value={formData.processParameters.postBoilPh} onChange={handleProcessParamChange} /><Input label="Boil Duration (min)" name="boilDuration" type="number" value={formData.processParameters.boilDuration} onChange={handleProcessParamChange} /><Input label="Whirlpool Duration (min)" name="whirlpoolDuration" type="number" value={formData.processParameters.whirlpoolDuration} onChange={handleProcessParamChange} /><Input label="Whirlpool Rest (min)" name="whirlpoolRestDuration" type="number" value={formData.processParameters.whirlpoolRestDuration} onChange={handleProcessParamChange} /><Input label="Cooling Duration (min)" name="coolingDuration" type="number" value={formData.processParameters.coolingDuration} onChange={handleProcessParamChange} /></div></div>
                             </div>
+                        </Card>
+                    </div>
+                )}
+
+                {activeTab === 'Finished Product' && (
+                    <Card title={t('Packaged Items')} icon={<BottleIcon className="w-5 h-5"/>}>
+                        <p className="text-sm text-gray-500 mb-2">{t('Define the final products for this recipe, including markup and packaging split.')}</p>
+                        {totalPackagingSplit !== 100 && <p className="text-sm text-yellow-600 bg-yellow-100 p-2 rounded-md mb-4">{t('Total Packaging Split must be 100%')}. Current: {totalPackagingSplit}%</p>}
+                        <div className="space-y-3">
+                            {formData.packagedItems.map((item, index) => (
+                                <div key={item.id} className="grid grid-cols-12 gap-2 items-end bg-color-background p-2 rounded-md">
+                                    <div className="col-span-12 sm:col-span-8">
+                                        <Select label={t('Item')} value={item.masterItemId} onChange={(e) => handleUpdateList('packagedItems', formData.packagedItems.map((p, i) => i === index ? { ...p, masterItemId: e.target.value } : p))} >
+                                            <option value="">{t('Select Item...')}</option>
+                                            {finishedGoodsMasterItems.map(mi => <option key={mi.id} value={mi.id}>{mi.name}</option>)}
+                                        </Select>
+                                    </div>
+                                    <div className="col-span-8 sm:col-span-3">
+                                        <Input label={t('Packaging Split')} type="number" value={item.packagingSplit || ''} onChange={e => handleUpdateList('packagedItems', formData.packagedItems.map((p, i) => i === index ? { ...p, packagingSplit: parseFloat(e.target.value) || 0 } : p))} unit="%" />
+                                    </div>
+                                    <div className="col-span-4 sm:col-span-1 flex justify-end">
+                                        <button type="button" onClick={() => handleUpdateList('packagedItems', formData.packagedItems.filter(p => p.id !== item.id))} className="p-2 text-red-500 hover:text-red-400">
+                                            <TrashIcon className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <button type="button" onClick={() => handleUpdateList('packagedItems', [...formData.packagedItems, { id: generateId(), masterItemId: '' }])} className="mt-4 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
+                            <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Packaged Item')}</span>
+                        </button>
+                    </Card>
+                )}
+                
+                {activeTab === 'Costs' && (
+                     <div className="space-y-6">
+                        <Card title={t('Raw Material Costs')}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="border-b-2 border-color-border/50"><tr><th className="p-2">{t('Ingredient Name')}</th><th className="p-2">{t('Stage')}</th><th className="p-2 text-right">{t('Quantity')}</th><th className="p-2 text-right">{t('Cost per Unit')}</th><th className="p-2 text-right">{t('Total Cost')}</th></tr></thead>
+                                    <tbody className="divide-y divide-color-border/20">
+                                        {allIngredientsForCosting.map(ing => { const item = masterItems.find(mi => mi.id === ing.masterItemId); const cost = item?.purchaseCost || 0; const total = ing.quantity * cost; return (<tr key={ing.id}><td className="p-2 font-semibold">{item?.name || '...'}</td><td className="p-2 text-gray-500">{t(ing.stage)}</td><td className="p-2 text-right font-mono">{ing.quantity.toFixed(2)} {item?.unit}</td><td className="p-2 text-right font-mono">{cost.toFixed(2)} €</td><td className="p-2 text-right font-mono font-bold">{total.toFixed(2)} €</td></tr>)})}
+                                    </tbody>
+                                    <tfoot><tr className="border-t-2 border-color-border/50"><td colSpan={4} className="p-2 text-right font-bold text-color-secondary">{t('Subtotal Raw Materials')}</td><td className="p-2 text-right font-mono font-bold text-lg text-color-secondary">{rawMaterialCost.toFixed(2)} €</td></tr></tfoot>
+                                </table>
+                            </div>
+                        </Card>
+
+                        <Card title={t('Packaging Materials')} icon={<BottleIcon className="w-5 h-5"/>}>
+                           <div className="space-y-2">
+                                {formData.packagingIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('packagingIngredients', formData.packagingIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('packagingIngredients', formData.packagingIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Category_Packaging']} panelType="packaging" />)}
+                            </div>
+                            <button type="button" onClick={() => handleUpdateList('packagingIngredients', [...formData.packagingIngredients, { id: generateId(), masterItemId: '', quantity: 0 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors">
+                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Packaging Material')}</span>
+                            </button>
+                        </Card>
+
+                        <Card title={t('Operational & Fixed Costs')}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                <Input label={t('Packaging Yield')} name="packagingYield" type="number" step="any" value={formData.processParameters.packagingYield || ''} onChange={handleProcessParamChange} unit="%" />
+                                <Input label={t('Other Costs')} name="other" type="number" step="any" value={formData.additionalCosts?.other || ''} onChange={handleAdditionalCostChange} unit="€" />
+                            </div>
+                        </Card>
+
+                         <Card title={t('Cost Summary')}>
+                            <div className="space-y-3 p-2">
+                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Subtotal Raw Materials')}</span><span className="font-mono text-lg">{rawMaterialCost.toFixed(2)} €</span></div>
+                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Subtotal Packaging')}</span><span className="font-mono text-lg">{packagingCost.toFixed(2)} €</span></div>
+                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Operational Costs per Batch')}</span><span className="font-mono text-lg">{operationalCostsPerBatch.toFixed(2)} €</span></div>
+                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Other Costs')}</span><span className="font-mono text-lg">{otherRecipeCosts.toFixed(2)} €</span></div>
+                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Calculated Excise Duty')}</span><span className="font-mono text-lg">{calculatedExciseDuty.toFixed(2)} €</span></div>
+                                <hr className="my-2 border-color-border/50"/>
+                                <div className="flex justify-between items-center text-xl"><span className="font-bold text-color-secondary">{t('Grand Total Batch Cost')}</span><span className="font-bold font-mono text-color-accent">{grandTotalCost.toFixed(2)} €</span></div>
+                                <div className="flex justify-between items-center text-xl"><span className="font-bold text-color-secondary">{t('Cost per Liter')}</span><span className="font-bold font-mono text-color-accent">{costPerLiter.toFixed(2)} €</span></div>
+                            </div>
+                        </Card>
+                        
+                        <Card title={t('Finished Product Costing')}>
+                           <div className="space-y-4">
+                            {formData.packagedItems.map(packagedItem => {
+                                const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
+                                if (!masterItem) return null;
+                                const split = (packagedItem.packagingSplit || 0) / 100;
+                                const totalCostForFormat = grandTotalCost * split;
+                                const packagedLiters = (formData.qualityControlSpec.liters.target || 0) * ((formData.processParameters.packagingYield || 0) / 100);
+                                const litersInFormat = packagedLiters * split;
+                                const costPerLiterFormat = litersInFormat > 0 ? totalCostForFormat / litersInFormat : 0;
+                                const costPerUnit = costPerLiterFormat * (masterItem.containerVolumeL || 0);
+
+                                return (
+                                <div key={packagedItem.id} className="bg-color-background/50 p-3 rounded-lg">
+                                    <h4 className="font-bold text-color-secondary mb-2">{masterItem.name}</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <h5 className="font-semibold mb-1">{t('Cost Breakdown for')} {masterItem.name}</h5>
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between"><span>{t('Raw Materials')}</span><span className="font-mono">{(rawMaterialCost * split).toFixed(2)}€</span></div>
+                                                <div className="flex justify-between"><span>{t('Packaging')}</span><span className="font-mono">{(packagingCost * split).toFixed(2)}€</span></div>
+                                                <div className="flex justify-between"><span>{t('Operational')}</span><span className="font-mono">{(operationalCostsPerBatch * split).toFixed(2)}€</span></div>
+                                                <div className="flex justify-between"><span>{t('Calculated Excise Duty')}</span><span className="font-mono">{(calculatedExciseDuty * split).toFixed(2)}€</span></div>
+                                                <div className="flex justify-between font-bold border-t border-color-border/50 pt-1 mt-1"><span>{t('Total')}</span><span className="font-mono">{(totalCostForFormat).toFixed(2)}€</span></div>
+                                            </div>
+                                        </div>
+                                         <div>
+                                            <h5 className="font-semibold mb-1">{t('Cost per Unit')}</h5>
+                                             <div className="space-y-1">
+                                                <div className="flex justify-between"><span>{t('Per Liter')}</span><span className="font-mono">{costPerLiterFormat.toFixed(2)} €</span></div>
+                                                <div className="flex justify-between font-bold text-color-accent border-t border-color-border/50 pt-1 mt-1"><span>{t('Per Unit')} ({masterItem.containerVolumeL}L)</span><span className="font-mono">{costPerUnit.toFixed(2)} €</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                );
+                            })}
+                           </div>
                         </Card>
                     </div>
                 )}

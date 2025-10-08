@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo, useEffect } from 'react';
 import Card from '../components/ui/Card';
 import { useTranslation } from '../hooks/useTranslation';
@@ -5,7 +7,7 @@ import Select from '../components/ui/Select';
 import Input from '../components/ui/Input';
 import ConfirmationModal from '../components/ConfirmationModal';
 import Modal from '../components/ui/Modal';
-import { Category } from '../types';
+import { Category, BatchNumberingSettings, BrewSheet } from '../types';
 import { PlusCircleIcon, PencilIcon, TrashIcon } from '../components/Icons';
 
 // --- Modal for Creating/Editing Categories ---
@@ -66,6 +68,92 @@ const CategoryModal: React.FC<{
     );
 };
 
+// --- Batch Numbering Settings Component ---
+const BatchNumberingSettingsCard: React.FC<{
+    settings: BatchNumberingSettings;
+    onSave: (settings: BatchNumberingSettings) => void;
+    batches: BrewSheet[];
+    t: (key: string) => string;
+}> = ({ settings, onSave, batches, t }) => {
+    const [currentSettings, setCurrentSettings] = useState(settings);
+
+    useEffect(() => {
+        setCurrentSettings(settings);
+    }, [settings]);
+
+    const nextCookNumberInfo = useMemo(() => {
+        const currentYear = new Date().getFullYear();
+        const batchesThisYear = batches.filter(b => new Date(b.cookDate).getFullYear() === currentYear);
+        const maxCookNumberThisYear = batchesThisYear.reduce((max, b) => Math.max(max, b.cookNumber), 0);
+        return { year: currentYear, number: maxCookNumberThisYear + 1 };
+    }, [batches]);
+
+    const handleLotSettingChange = (field: keyof BatchNumberingSettings['lotNumberSettings'], value: string | number) => {
+        setCurrentSettings(prev => ({
+            ...prev,
+            lotNumberSettings: {
+                ...prev.lotNumberSettings,
+                [field]: value
+            }
+        }));
+    };
+
+    const handleSave = () => {
+        onSave(currentSettings);
+    };
+
+    return (
+        <Card title={t('Batch Numbering Settings')}>
+            <div className="space-y-6">
+                <div>
+                    <h4 className="font-semibold text-color-secondary mb-2">{t('Lot Number Format')}</h4>
+                    <p className="text-sm text-gray-500 mb-2">{t('Define the template for automatic lot number generation.')}</p>
+                    <Input
+                        label={t('Lot Number Format')}
+                        value={currentSettings.lotNumberSettings.template}
+                        onChange={(e) => handleLotSettingChange('template', e.target.value)}
+                    />
+                    <p className="text-xs text-gray-400 mt-1">
+                        {t('Placeholders')}: &#123;YYYY&#125;, &#123;YY&#125;, &#123;MM&#125;, &#123;DD&#125;, &#123;SEQ&#125;.
+                        <br/>
+                        {t('SEQ_Placeholder_Note')}
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Select
+                        label={t('Sequence Reset Frequency')}
+                        value={currentSettings.lotNumberSettings.resetFrequency}
+                        onChange={(e) => handleLotSettingChange('resetFrequency', e.target.value)}
+                    >
+                        <option value="yearly">{t('Yearly')}</option>
+                        <option value="monthly">{t('Monthly')}</option>
+                        <option value="never">{t('Never')}</option>
+                    </Select>
+                     <Input
+                        label={t('Sequence Number Digits')}
+                        type="number"
+                        min="1"
+                        max="6"
+                        value={currentSettings.lotNumberSettings.sequenceDigits}
+                        onChange={(e) => handleLotSettingChange('sequenceDigits', parseInt(e.target.value, 10) || 3)}
+                    />
+                </div>
+                <div>
+                    <h4 className="font-semibold text-color-secondary mb-2">{t('Cook Number Automation')}</h4>
+                    <div className="bg-color-background p-3 rounded-md">
+                        <p className="text-sm text-gray-500">{t('The cook number resets to 1 at the beginning of each year.')}</p>
+                        <p className="text-sm mt-2">{t('Next Cook Number for')} {nextCookNumberInfo.year}: <strong className="text-color-accent font-mono text-base">{nextCookNumberInfo.number}</strong></p>
+                    </div>
+                </div>
+                <div className="flex justify-end">
+                    <button onClick={handleSave} className="bg-color-secondary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg">
+                        {t('Save Settings')}
+                    </button>
+                </div>
+            </div>
+        </Card>
+    );
+};
 
 // --- Main Settings Page Component ---
 
@@ -73,9 +161,12 @@ interface SettingsPageProps {
   categories: Category[];
   onSaveCategory: (category: Omit<Category, 'id'> | Category) => void;
   onDeleteCategory: (categoryId: string) => void;
+  batchNumberingSettings: BatchNumberingSettings;
+  onSaveBatchNumberingSettings: (settings: BatchNumberingSettings) => void;
+  batches: BrewSheet[];
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ categories, onSaveCategory, onDeleteCategory }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ categories, onSaveCategory, onDeleteCategory, batchNumberingSettings, onSaveBatchNumberingSettings, batches }) => {
     const { t, language, setLanguage } = useTranslation();
     const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
@@ -149,6 +240,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ categories, onSaveCategory,
                         <option value="it">{t('Italian')}</option>
                     </Select>
                 </Card>
+
+                <BatchNumberingSettingsCard 
+                    settings={batchNumberingSettings}
+                    onSave={onSaveBatchNumberingSettings}
+                    batches={batches}
+                    t={t}
+                />
 
                 <Card title={t('Category Management')}>
                     <p className="text-gray-500 mb-4">{t('Manage your product categories and subcategories.')}</p>

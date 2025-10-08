@@ -1,110 +1,114 @@
 import React from 'react';
 import { Page } from '../types';
-import { HomeIcon, BeakerIcon, CalendarIcon, BookOpenIcon, ArchiveIcon, TagIcon, TruckIcon, BuildingStoreIcon, ClipboardListIcon, ChartBarIcon, WrenchIcon, CogIcon, XIcon, ShoppingBagIcon, UsersIcon, ClipboardCheckIcon } from './Icons';
-import { useTranslation } from '../hooks/useTranslation';
 import { Logo } from './Logo';
+import {
+    HomeIcon, BeakerIcon, BookOpenIcon, ArchiveIcon, TagIcon, ClipboardListIcon, ChartBarIcon,
+    ClipboardCheckIcon, ShoppingBagIcon, UsersIcon, TruckIcon, BuildingStoreIcon, WrenchIcon,
+    CogIcon, CalendarIcon
+} from './Icons';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface SidebarProps {
     currentPage: Page;
     onNavigate: (page: Page) => void;
     isOpen: boolean;
-    onClose: () => void;
+    setIsOpen: (isOpen: boolean) => void;
 }
 
-interface NavItem {
-    page: Page;
-    labelKey: string;
-    icon: React.ReactNode;
-}
-
-const productionNavItems: NavItem[] = [
-    { page: Page.Dashboard, labelKey: 'Dashboard', icon: <HomeIcon className="w-5 h-5" /> },
-    { page: Page.Batches, labelKey: 'Batches', icon: <BeakerIcon className="w-5 h-5" /> },
-    { page: Page.Calendar, labelKey: 'Calendar', icon: <CalendarIcon className="w-5 h-5" /> },
-    { page: Page.QualityControl, labelKey: 'Quality Control', icon: <ClipboardCheckIcon className="w-5 h-5" /> },
-    { page: Page.Recipes, labelKey: 'Recipes', icon: <BookOpenIcon className="w-5 h-5" /> },
-    { page: Page.Warehouse, labelKey: 'Raw Materials Warehouse', icon: <ArchiveIcon className="w-5 h-5" /> },
-    { page: Page.Items, labelKey: 'Item Master Data', icon: <TagIcon className="w-5 h-5" /> },
-    { page: Page.ProductionPlan, labelKey: 'Production Plan', icon: <ClipboardListIcon className="w-5 h-5" /> },
-    { page: Page.Suppliers, labelKey: 'Suppliers', icon: <TruckIcon className="w-5 h-5" /> },
-    { page: Page.Locations, labelKey: 'Locations', icon: <BuildingStoreIcon className="w-5 h-5" /> },
-    { page: Page.Analysis, labelKey: 'Analysis', icon: <ChartBarIcon className="w-5 h-5" /> },
-    { page: Page.Tools, labelKey: 'Tools', icon: <WrenchIcon className="w-5 h-5" /> },
+const navItems = [
+    { page: Page.Dashboard, icon: HomeIcon, labelKey: 'Dashboard' },
+    {
+        labelKey: 'Sidebar_Production',
+        subItems: [
+            { page: Page.Calendar, icon: CalendarIcon, labelKey: 'Calendar' },
+            { page: Page.Batches, icon: BeakerIcon, labelKey: 'Batches' },
+            { page: Page.Recipes, icon: BookOpenIcon, labelKey: 'Recipes' },
+        ]
+    },
+    {
+        labelKey: 'Sidebar_Warehouse',
+        subItems: [
+            { page: Page.Warehouse, icon: ArchiveIcon, labelKey: 'Warehouse' },
+            { page: Page.Items, icon: TagIcon, labelKey: 'Items' },
+        ]
+    },
+    {
+        labelKey: 'Sidebar_Commercial',
+        subItems: [
+            { page: Page.Orders, icon: ShoppingBagIcon, labelKey: 'Orders' },
+            { page: Page.Customers, icon: UsersIcon, labelKey: 'Customers' },
+            { page: Page.CustomerPriceLists, icon: UsersIcon, labelKey: 'Customer Price Lists' },
+            { page: Page.Shipping, icon: TruckIcon, labelKey: 'Shipping' },
+        ]
+    },
+    {
+        labelKey: 'Sidebar_Planning',
+        subItems: [
+            { page: Page.ProductionPlan, icon: ClipboardListIcon, labelKey: 'Production Plan' },
+            { page: Page.Analysis, icon: ChartBarIcon, labelKey: 'Analysis' },
+            { page: Page.QualityControl, icon: ClipboardCheckIcon, labelKey: 'Quality Control' },
+        ]
+    },
+    {
+        labelKey: 'Sidebar_Admin',
+        subItems: [
+            { page: Page.ProductionCosts, icon: ChartBarIcon, labelKey: 'Production Costs' },
+            { page: Page.PriceList, icon: TagIcon, labelKey: 'Price Lists' },
+            { page: Page.Suppliers, icon: TruckIcon, labelKey: 'Suppliers' },
+            { page: Page.Locations, icon: BuildingStoreIcon, labelKey: 'Locations' },
+        ]
+    },
+    {
+        labelKey: 'Sidebar_Settings',
+        subItems: [
+            { page: Page.Tools, icon: WrenchIcon, labelKey: 'Tools' },
+            { page: Page.Settings, icon: CogIcon, labelKey: 'Settings' },
+        ]
+    }
 ];
 
-const commercialNavItems: NavItem[] = [
-    { page: Page.Orders, labelKey: 'Orders', icon: <ShoppingBagIcon className="w-5 h-5" /> },
-    { page: Page.Customers, labelKey: 'Customers', icon: <UsersIcon className="w-5 h-5" /> },
-    { page: Page.WarehouseFinishedGoods, labelKey: 'Finished Goods Warehouse', icon: <ArchiveIcon className="w-5 h-5" /> },
-];
-
-const settingsNavItem: NavItem = 
-    { page: Page.Settings, labelKey: 'Settings', icon: <CogIcon className="w-5 h-5" /> };
-
-const NavLink: React.FC<{
-    item: NavItem;
-    isActive: boolean;
-    onClick: () => void;
-    t: (key: string) => string;
-}> = ({ item, isActive, onClick, t }) => (
-    <li>
-        <button
-            onClick={onClick}
-            className={`flex items-center space-x-3 w-full text-left p-2 rounded-md transition-colors text-sm font-semibold ${
-                isActive
-                ? 'bg-color-accent text-white'
-                : 'text-gray-400 hover:bg-color-border hover:text-color-text'
-            }`}
-        >
-            {item.icon}
-            <span>{t(item.labelKey)}</span>
-        </button>
-    </li>
-);
-
-const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpen, setIsOpen }) => {
     const { t } = useTranslation();
+
+    const NavLink: React.FC<{ page: Page, icon: React.ElementType, labelKey: string }> = ({ page, icon: Icon, labelKey }) => {
+        const isActive = currentPage === page;
+        return (
+            <button
+                onClick={() => onNavigate(page)}
+                className={`flex items-center w-full space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? 'bg-color-accent text-white shadow-md' : 'text-gray-400 hover:bg-color-surface hover:text-color-text'
+                }`}
+            >
+                <Icon className="w-5 h-5" />
+                <span>{t(labelKey)}</span>
+            </button>
+        );
+    };
+
     return (
-        <aside className={`bg-color-surface w-64 p-4 flex-shrink-0 flex flex-col overflow-y-auto
-                           fixed md:relative md:translate-x-0
-                           inset-y-0 left-0 z-40
-                           transition-transform duration-300 ease-in-out
-                           ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center space-x-2">
-                    <Logo className="w-8 h-8" aria-label="BrewFlow Logo"/>
-                    <span className="text-xl font-bold text-color-text">BrewFlow</span>
+        <>
+            <div className={`fixed inset-0 bg-black/60 z-30 md:hidden transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsOpen(false)}></div>
+            <aside className={`flex-shrink-0 w-64 bg-color-surface text-color-text flex flex-col p-4 fixed md:relative h-full z-40 transform transition-transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}>
+                <div className="flex items-center space-x-2 pb-4 px-2 border-b border-color-border mb-4">
+                    <Logo className="h-10 w-10" />
+                    <span className="font-bold text-2xl text-color-accent">BrewFlow</span>
                 </div>
-                 <button className="md:hidden p-1 text-gray-400 hover:text-white" onClick={onClose} aria-label="Close menu">
-                    <XIcon className="w-6 h-6" />
-                </button>
-            </div>
-            
-            <nav className="flex-1 flex flex-col justify-between">
-                <div>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2">{t('Production')}</h3>
-                    <ul className="space-y-1">
-                        {productionNavItems.map(item => (
-                            <NavLink key={item.page} item={item} isActive={currentPage === item.page} onClick={() => onNavigate(item.page)} t={t} />
-                        ))}
-                    </ul>
-                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-6 mb-2 px-2">{t('Commercial')}</h3>
-                    <ul className="space-y-1">
-                        {commercialNavItems.map(item => (
-                            <NavLink key={item.page} item={item} isActive={currentPage === item.page} onClick={() => onNavigate(item.page)} t={t} />
-                        ))}
-                    </ul>
-                    <ul className="space-y-1 mt-6 pt-6 border-t border-color-border/20">
-                       <NavLink item={settingsNavItem} isActive={currentPage === settingsNavItem.page} onClick={() => onNavigate(settingsNavItem.page)} t={t} />
-                    </ul>
-                </div>
-                <div className="text-center text-xs text-gray-600 mt-4">
-                    <p>BrewFlow &copy; 2024</p>
-                    <p>Version 1.1.0</p>
-                </div>
-            </nav>
-        </aside>
+                <nav className="flex-1 space-y-2 overflow-y-auto pr-2 -mr-2">
+                    {navItems.map((item, index) => {
+                        if ('subItems' in item) {
+                            return (
+                                <div key={index} className="space-y-2">
+                                    <h3 className="px-3 pt-4 pb-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">{t(item.labelKey)}</h3>
+                                    {item.subItems.map(subItem => (
+                                        <NavLink key={subItem.page} page={subItem.page} icon={subItem.icon} labelKey={subItem.labelKey} />
+                                    ))}
+                                </div>
+                            );
+                        }
+                        return <NavLink key={item.page} page={item.page} icon={item.icon} labelKey={item.labelKey} />;
+                    })}
+                </nav>
+            </aside>
+        </>
     );
 };
-
-export default Sidebar;

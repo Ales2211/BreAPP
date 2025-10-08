@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { MasterItem, WarehouseItem } from '../types';
 import Input from '../components/ui/Input';
@@ -206,7 +204,7 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
 
              <div className="mt-8 flex justify-end space-x-4">
                  {/* Fix: Updated styling to be consistent with the app's theme. */}
-                 <button type="button" onClick={onBack} className="bg-color-border hover:bg-gray-600 text-color-text font-bold py-2 px-6 rounded-lg shadow-md transition-colors">
+                 <button type="button" onClick={onBack} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg shadow-md transition-colors">
                     {t('Cancel')}
                 </button>
                 {/* Fix: Updated styling to be consistent with the app's theme. */}

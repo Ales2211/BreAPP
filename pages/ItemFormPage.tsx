@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { MasterItem, Category, Supplier } from '../types';
 import Input from '../components/ui/Input';
@@ -76,7 +77,8 @@ const ItemFormPage: React.FC<ItemFormPageProps> = ({ item, categories, suppliers
         return itemCategory.parentCategoryId === finishedGoodsCategory.id || itemCategory.id === finishedGoodsCategory.id;
     }, [formData.categoryId, categories]);
     
-    const units: MasterItem['unit'][] = ['Kg', 'g', 'Lt', 'pcs'];
+    // Fix: Corrected 'Lt' to 'L' to match the Unit type definition.
+    const units: MasterItem['unit'][] = ['Kg', 'g', 'L', 'pcs'];
 
     return (
         <form onSubmit={handleSave} className="max-w-4xl mx-auto">

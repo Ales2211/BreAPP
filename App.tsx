@@ -1,511 +1,335 @@
 
-import React, { useState, useMemo } from 'react';
-import Sidebar from './components/Sidebar';
+import React, { useState } from 'react';
+import {
+  Page, Recipe, BrewSheet, MasterItem, WarehouseItem, Category, Location, Supplier, Customer, Order,
+  BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument
+} from './types';
+import { Sidebar } from './components/Sidebar';
+import { MenuIcon } from './components/Icons';
+import usePersistentState from './hooks/usePersistentState';
+import { useToast } from './hooks/useToast';
+import {
+  mockRecipes, mockBatches, mockMasterItems, mockWarehouseItems, mockCategories,
+  mockLocations, mockSuppliers, mockCustomers, mockOrders, mockBatchNumberingSettings,
+  mockAdminSettings, mockCustomerPriceLists, mockTransportDocuments, generateBrewSheetFromRecipe
+} from './data/mockData';
+
+// Import all page components
 import DashboardPage from './pages/DashboardPage';
 import BatchesListPage from './pages/BatchesListPage';
 import BrewSheetPage from './pages/BrewSheetPage';
-import CalendarPage from './pages/CalendarPage';
 import RecipesPage from './pages/RecipesPage';
 import RecipeFormPage from './pages/RecipeFormPage';
+import CalendarPage from './pages/CalendarPage';
 import WarehousePage from './pages/WarehousePage';
-import WarehouseLoadFormPage from './pages/WarehouseLoadFormPage';
-import WarehouseUnloadFormPage from './pages/WarehouseUnloadFormPage';
 import ItemsPage from './pages/ItemsPage';
 import ItemFormPage from './pages/ItemFormPage';
-import SuppliersPage from './pages/SuppliersPage';
-import LocationsPage from './pages/LocationsPage';
-import AnalysisPage from './pages/AnalysisPage';
 import ProductionPlanPage from './pages/ProductionPlanPage';
-import ToolsPage from './pages/ToolsPage';
-import SettingsPage from './pages/SettingsPage';
-import CustomersPage from './pages/CustomersPage';
+import AnalysisPage from './pages/AnalysisPage';
+import QualityControlPage from './pages/QualityControlPage';
 import OrdersListPage from './pages/OrdersListPage';
 import OrderFormPage from './pages/OrderFormPage';
-import QualityControlPage from './pages/QualityControlPage';
-import { Page, BrewSheet, Recipe, MasterItem, WarehouseItem, Location, Supplier, Category, Customer, Order, Ingredient, BoilWhirlpoolIngredient, TankIngredient, MashStep } from './types';
-import { mockBrewSheets, mockRecipes, mockMasterItems, mockWarehouseItems, mockLocations, mockSuppliers, mockCategories, mockCustomers, mockOrders } from './data/mockData';
-import { useToast, } from './hooks/useToast';
-import { useTranslation } from './hooks/useTranslation';
-import { MenuIcon } from './components/Icons';
-import usePersistentState from './hooks/usePersistentState';
-
-const generateUniqueId = (prefix: string): string => {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-};
+import CustomersPage from './pages/CustomersPage';
+import SuppliersPage from './pages/SuppliersPage';
+import LocationsPage from './pages/LocationsPage';
+import ProductionCostsPage from './pages/ProductionCostsPage';
+import PriceListPage from './pages/PriceListPage';
+import CustomerPriceListsPage from './pages/CustomerPriceListsPage';
+import SettingsPage from './pages/SettingsPage';
+import ToolsPage from './pages/ToolsPage';
+import WarehouseLoadFormPage from './pages/WarehouseLoadFormPage';
+import WarehouseUnloadFormPage from './pages/WarehouseUnloadFormPage';
+import ShippingPage from './pages/ShippingPage';
 
 const App: React.FC = () => {
-    const { t } = useTranslation();
-    const [page, setPage] = useState<Page | { page: Page; id: string }>(Page.Dashboard);
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const toast = useToast();
+  // Data state
+  const [recipes, setRecipes] = usePersistentState<Recipe[]>('recipes', mockRecipes);
+  const [batches, setBatches] = usePersistentState<BrewSheet[]>('batches', mockBatches);
+  const [masterItems, setMasterItems] = usePersistentState<MasterItem[]>('masterItems', mockMasterItems);
+  const [warehouseItems, setWarehouseItems] = usePersistentState<WarehouseItem[]>('warehouseItems', mockWarehouseItems);
+  const [categories, setCategories] = usePersistentState<Category[]>('categories', mockCategories);
+  const [locations, setLocations] = usePersistentState<Location[]>('locations', mockLocations);
+  const [suppliers, setSuppliers] = usePersistentState<Supplier[]>('suppliers', mockSuppliers);
+  const [customers, setCustomers] = usePersistentState<Customer[]>('customers', mockCustomers);
+  const [orders, setOrders] = usePersistentState<Order[]>('orders', mockOrders);
+  const [transportDocuments, setTransportDocuments] = usePersistentState<TransportDocument[]>('transportDocuments', mockTransportDocuments);
+  const [batchNumberingSettings, setBatchNumberingSettings] = usePersistentState<BatchNumberingSettings>('batchNumberingSettings', mockBatchNumberingSettings);
+  const [adminSettings, setAdminSettings] = usePersistentState<AdministrationSettings>('adminSettings', mockAdminSettings);
+  const [customerPriceLists, setCustomerPriceLists] = usePersistentState<CustomerPriceList[]>('customerPriceLists', mockCustomerPriceLists);
 
-    // Data state
-    const [recipes, setRecipes] = usePersistentState<Recipe[]>('brewflow_recipes', mockRecipes);
-    const [masterItems, setMasterItems] = usePersistentState<MasterItem[]>('brewflow_master_items', mockMasterItems);
-    const [batches, setBatches] = usePersistentState<BrewSheet[]>('brewflow_batches', mockBrewSheets);
-    const [warehouseItems, setWarehouseItems] = usePersistentState<WarehouseItem[]>('brewflow_warehouse_items', mockWarehouseItems);
-    const [locations, setLocations] = usePersistentState<Location[]>('brewflow_locations', mockLocations);
-    const [suppliers, setSuppliers] = usePersistentState<Supplier[]>('brewflow_suppliers', mockSuppliers);
-    const [categories, setCategories] = usePersistentState<Category[]>('brewflow_categories', mockCategories);
-    const [customers, setCustomers] = usePersistentState<Customer[]>('brewflow_customers', mockCustomers);
-    const [orders, setOrders] = usePersistentState<Order[]>('brewflow_orders', mockOrders);
+  // UI state
+  const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const toast = useToast();
 
-    const {
-        rawMaterialMasterItems,
-        rawMaterialWarehouseItems,
-        finishedGoodsMasterItems,
-        finishedGoodsWarehouseItems
-    } = useMemo(() => {
-        const fgParentCat = categories.find(c => c.name === 'Finished Goods');
-        const fgCategoryIds = new Set<string>();
-        if (fgParentCat) {
-            fgCategoryIds.add(fgParentCat.id);
-            categories.forEach(cat => {
-                if (cat.parentCategoryId === fgParentCat.id) {
-                    fgCategoryIds.add(cat.id);
-                }
-            });
-        }
+  // State for detail/form pages
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [formState, setFormState] = useState<{ page: Page, mode: 'new' | 'edit' | 'load' | 'unload', id?: string } | null>(null);
 
-        const allMasterItems = masterItems;
-        const allWarehouseItems = warehouseItems;
+  // --- Navigation ---
+  const handleNavigate = (page: Page | { page: Page; id: string }) => {
+    if (typeof page === 'object') {
+      setCurrentPage(page.page);
+      setSelectedId(page.id);
+    } else {
+      setCurrentPage(page);
+      setSelectedId(null);
+    }
+    setFormState(null);
+    setSidebarOpen(false);
+  };
 
-        const rawMIs = allMasterItems.filter(mi => !fgCategoryIds.has(mi.categoryId));
-        const finishedMIs = allMasterItems.filter(mi => fgCategoryIds.has(mi.categoryId));
+  const goBack = () => {
+    setSelectedId(null);
+    setFormState(null);
+  };
 
-        const rawWHIs = allWarehouseItems.filter(whi => {
-            const mi = allMasterItems.find(i => i.id === whi.masterItemId);
-            return mi ? !fgCategoryIds.has(mi.categoryId) : false;
+  const openForm = (page: Page, mode: 'new' | 'edit' | 'load' | 'unload', id?: string) => {
+    setFormState({ page, mode, id });
+  };
+  
+  // --- CRUD Handlers ---
+
+  // Batches
+  const handleSaveBatch = (batch: BrewSheet) => {
+    setBatches(prev => prev.map(b => b.id === batch.id ? batch : b));
+    toast.success('Batch saved successfully!');
+    goBack();
+  };
+  const handleCreateBatch = (recipeId: string, details: { cookDate: string; fermenterId: string; }) => {
+    const recipe = recipes.find(r => r.id === recipeId);
+    if (recipe) {
+        const newBatch = generateBrewSheetFromRecipe(recipe, details.cookDate, details.fermenterId, batches);
+        setBatches(prev => [...prev, newBatch]);
+        toast.success('New batch created!');
+    }
+  };
+  const handleDeleteBatch = (batchId: string) => {
+    setBatches(prev => prev.filter(b => b.id !== batchId));
+    toast.success('Batch deleted!');
+  };
+
+  // Recipes
+  const handleSaveRecipe = (recipeData: Recipe | Omit<Recipe, 'id'>) => {
+    if ('id' in recipeData) {
+        setRecipes(prev => prev.map(r => r.id === recipeData.id ? recipeData : r));
+        toast.success('Recipe updated!');
+    } else {
+        const newRecipe = { ...recipeData, id: `recipe_${Date.now()}` };
+        setRecipes(prev => [...prev, newRecipe]);
+        toast.success('Recipe created!');
+    }
+    goBack();
+  };
+  const handleDeleteRecipe = (recipeId: string) => {
+    setRecipes(prev => prev.filter(r => r.id !== recipeId));
+    toast.success('Recipe deleted!');
+  };
+  
+  // Items
+  const handleSaveMasterItem = (itemData: MasterItem | Omit<MasterItem, 'id'>) => {
+    if ('id' in itemData) {
+        setMasterItems(prev => prev.map(i => i.id === itemData.id ? itemData : i));
+        toast.success('Item updated!');
+    } else {
+        const newItem = { ...itemData, id: `item_${Date.now()}` };
+        setMasterItems(prev => [...prev, newItem]);
+        toast.success('Item created!');
+    }
+    goBack();
+  };
+  const handleDeleteMasterItem = (itemId: string) => {
+    setMasterItems(prev => prev.filter(i => i.id !== itemId));
+    toast.success('Item deleted!');
+  };
+
+  // Warehouse
+  const handleLoadItems = (items: Omit<WarehouseItem, 'id'>[]) => {
+    const newItems: WarehouseItem[] = items.map(item => ({
+        ...item,
+        id: `wh_${Date.now()}_${Math.random()}`
+    }));
+    setWarehouseItems(prev => [...prev, ...newItems]);
+    toast.success(`${items.length} item(s) loaded into warehouse.`);
+    goBack();
+  };
+
+  const handleUnloadItems = (items: Omit<WarehouseItem, 'id'>[]) => {
+    setWarehouseItems(prev => {
+        const newWhItems = [...prev];
+        items.forEach(itemToUnload => {
+            let remainingQty = itemToUnload.quantity;
+            const relevantLots = newWhItems
+                .filter(i => i.masterItemId === itemToUnload.masterItemId && i.lotNumber === itemToUnload.lotNumber)
+                .sort((a,b) => new Date(a.arrivalDate).getTime() - new Date(b.arrivalDate).getTime());
+
+            for (const lot of relevantLots) {
+                if (remainingQty <= 0) break;
+                const toRemove = Math.min(remainingQty, lot.quantity);
+                lot.quantity -= toRemove;
+                remainingQty -= toRemove;
+            }
         });
+        return newWhItems.filter(i => i.quantity > 0.001);
+    });
+    toast.success(`${items.length} type(s) of items unloaded from warehouse.`);
+    goBack();
+  };
 
-        const finishedWHIs = allWarehouseItems.filter(whi => {
-            const mi = allMasterItems.find(i => i.id === whi.masterItemId);
-            return mi ? fgCategoryIds.has(mi.categoryId) : false;
-        });
+  const handleLoadFinishedGoods = (items: Omit<WarehouseItem, 'id'>[]) => {
+    handleLoadItems(items);
+    toast.success('Finished goods loaded to warehouse.');
+  };
 
-        return {
-            rawMaterialMasterItems: rawMIs,
-            rawMaterialWarehouseItems: rawWHIs,
-            finishedGoodsMasterItems: finishedMIs,
-            finishedGoodsWarehouseItems: finishedWHIs
-        };
-    }, [masterItems, warehouseItems, categories]);
-
-
-    const handleNavigate = (newPage: Page | { page: Page; id: string }) => {
-        setPage(newPage);
-        setIsSidebarOpen(false);
-    };
-
-    // --- CRUD Handlers ---
-
-    // Recipes
-    const handleSaveRecipe = (recipeToSave: Recipe) => {
-        if ('id' in recipeToSave && recipeToSave.id) {
-            setRecipes(recipes.map(r => r.id === recipeToSave.id ? recipeToSave : r));
-            toast.success('Recipe updated successfully!');
-        } else {
-            setRecipes([...recipes, { ...recipeToSave, id: generateUniqueId('recipe') }]);
-            toast.success('Recipe created successfully!');
-        }
-        handleNavigate(Page.Recipes);
-    };
-    const handleDeleteRecipe = (recipeId: string) => {
-        setRecipes(recipes.filter(r => r.id !== recipeId));
-        toast.success('Recipe deleted.');
-    };
-
-    // Master Items
-    const handleSaveItem = (itemToSave: MasterItem) => {
-        if ('id' in itemToSave && itemToSave.id) {
-            setMasterItems(masterItems.map(i => i.id === itemToSave.id ? itemToSave : i));
-            toast.success('Item updated successfully!');
-        } else {
-            setMasterItems([...masterItems, { ...itemToSave, id: generateUniqueId('item') }]);
-            toast.success('Item created successfully!');
-        }
-        handleNavigate(Page.Items);
-    };
-    const handleDeleteItem = (itemId: string) => {
-        setMasterItems(masterItems.filter(i => i.id !== itemId));
-        toast.success('Item deleted.');
-    };
-
-    // Batches
-    const handleSaveBatch = (batchToSave: BrewSheet) => {
-        setBatches(batches.map(b => b.id === batchToSave.id ? batchToSave : b));
-        toast.success(`Batch ${batchToSave.lot} saved.`);
-    };
-    const handleDeleteBatch = (batchId: string) => {
-        setBatches(batches.filter(b => b.id !== batchId));
-        toast.success('Batch deleted.');
+  // Orders
+  const handleSaveOrder = (orderData: Order) => {
+    if (orders.some(o => o.id === orderData.id)) {
+        setOrders(prev => prev.map(o => o.id === orderData.id ? orderData : o));
+        toast.success('Order updated!');
+    } else {
+        const newOrder = { ...orderData, id: `ord_${Date.now()}` };
+        setOrders(prev => [...prev, newOrder]);
+        toast.success('Order created!');
     }
-    const handleCreateBatch = (recipeId: string, details: { lot: string; cookDate: string; cookNumber: number; fermenterId: string; }) => {
-        const recipe = recipes.find(r => r.id === recipeId);
-        if (!recipe) return;
+    goBack();
+  };
+  const handleDeleteOrder = (orderId: string) => {
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    toast.success('Order deleted!');
+  };
 
-        const newBatch: BrewSheet = {
-            id: generateUniqueId('batch'),
-            recipeId: recipe.id,
-            beerName: recipe.name,
-            lot: details.lot,
-            cookNumber: details.cookNumber,
-            cookDate: details.cookDate,
-            fermenterId: details.fermenterId,
-            status: 'Planned',
-            unloadStatus: {
-                mash: false,
-                boil: false,
-                fermentation: false,
-            },
-            mashLog: {
-                expected: JSON.parse(JSON.stringify({
-                    ingredients: recipe.mashIngredients,
-                    steps: recipe.mashSteps,
-                    mashPh: recipe.processParameters.expectedMashPh,
-                    expectedIodineTime: recipe.processParameters.expectedIodineTime,
-                    mashWaterMainsL: recipe.processParameters.mashWaterMainsL,
-                    mashWaterMainsMicroSiemens: recipe.processParameters.mashWaterMainsMicroSiemens,
-                    mashWaterRoL: recipe.processParameters.mashWaterRoL,
-                    mashWaterRoMicroSiemens: recipe.processParameters.mashWaterRoMicroSiemens,
-                    maltMilling: recipe.processParameters.maltMilling,
-                })),
-                actual: { 
-                    ingredients: JSON.parse(JSON.stringify(recipe.mashIngredients)).map((ing: Ingredient) => ({ id: ing.id, masterItemId: ing.masterItemId, lotAssignments: [] })),
-                    steps: JSON.parse(JSON.stringify(recipe.mashSteps)).map((step: MashStep) => ({ ...step }))
-                }
-            },
-            lauterLog: {
-                expected: JSON.parse(JSON.stringify({
-                     transferDuration: recipe.processParameters.transferDuration,
-                     recirculationDuration: recipe.processParameters.recirculationDuration,
-                     filtrationDuration: recipe.processParameters.filtrationDuration,
-                     firstWortPlato: recipe.processParameters.firstWortPlato,
-                     firstWortPh: recipe.processParameters.firstWortPh,
-                     lastWortPlato: recipe.processParameters.lastWortPlato,
-                     lastWortPh: recipe.processParameters.lastWortPh,
-                     spargeWaterL: recipe.processParameters.spargeWaterL,
-                     spargeWaterMicroSiemens: recipe.processParameters.spargeWaterMicroSiemens,
-                     spargeWaterPh: recipe.processParameters.spargeWaterPh,
-                })),
-                actual: {}
-            },
-            boilLog: {
-                expected: JSON.parse(JSON.stringify({
-                    ingredients: recipe.boilWhirlpoolIngredients,
-                    preBoilLiters: recipe.processParameters.preBoilLiters,
-                    preBoilPlato: recipe.processParameters.preBoilPlato,
-                    preBoilPh: recipe.processParameters.preBoilPh,
-                    boilDuration: recipe.processParameters.boilDuration,
-                    postBoilLiters: recipe.processParameters.postBoilLiters,
-                    postBoilPlato: recipe.processParameters.postBoilPlato,
-                    postBoilPh: recipe.processParameters.postBoilPh,
-                    whirlpoolDuration: recipe.processParameters.whirlpoolDuration,
-                    whirlpoolRestDuration: recipe.processParameters.whirlpoolRestDuration,
-                    coolingDuration: recipe.processParameters.coolingDuration,
-                })),
-                actual: { 
-                    ingredients: JSON.parse(JSON.stringify(recipe.boilWhirlpoolIngredients)).map((ing: BoilWhirlpoolIngredient) => ({ ...ing, lotAssignments: [] })) 
-                }
-            },
-            fermentationLog: {
-                expected: JSON.parse(JSON.stringify({
-                    steps: recipe.fermentationSteps,
-                    additions: recipe.tankIngredients
-                })),
-                actual: { 
-                    additions: JSON.parse(JSON.stringify(recipe.tankIngredients)).map((ing: TankIngredient) => ({ ...ing, lotAssignments: [] })),
-                    logEntries: []
-                }
-            },
-            packagingLog: {
-                summaryExpectedLiters: recipe.qualityControlSpec.liters.target,
-                packagingLoadedToWarehouse: false,
-                packagedItems: JSON.parse(JSON.stringify(recipe.packagedItems)).map((p: any) => ({ ...p, quantityGood: 0 }))
-            },
-            qualityControlLog: {
-                sensoryPanelLogs: [],
-                labAnalysisLogs: [],
-            },
-        };
+  // Others...
+  const handleSaveCategory = (categoryData: Category | Omit<Category, 'id'>) => {
+      if ('id' in categoryData) {
+          setCategories(prev => prev.map(c => c.id === categoryData.id ? categoryData : c));
+      } else {
+          setCategories(prev => [...prev, { ...categoryData, id: `cat_${Date.now()}` }]);
+      }
+      toast.success('Category saved.');
+  };
+  const handleDeleteCategory = (categoryId: string) => {
+      setCategories(prev => prev.filter(c => c.id !== categoryId && c.parentCategoryId !== categoryId));
+      toast.success('Category deleted.');
+  };
 
-        setBatches(prev => [...prev, newBatch].sort((a,b) => new Date(b.cookDate).getTime() - new Date(a.cookDate).getTime()));
-        toast.success(`Batch ${details.lot} created!`);
-    };
-
-    // Warehouse
-    const handleLoadWarehouseItems = (itemsToLoad: Omit<WarehouseItem, 'id'>[]) => {
-        const newItems = itemsToLoad.map(item => ({ ...item, id: generateUniqueId('wh')}));
-        setWarehouseItems(prev => [...prev, ...newItems]);
-        toast.success(`${itemsToLoad.length} item(s) loaded into warehouse.`);
-        handleNavigate(Page.Warehouse);
+  const handleSaveSupplier = (supplierData: Supplier | Omit<Supplier, 'id'>) => {
+    if ('id' in supplierData) {
+        setSuppliers(prev => prev.map(s => s.id === supplierData.id ? supplierData : s));
+    } else {
+        setSuppliers(prev => [...prev, { ...supplierData, id: `sup_${Date.now()}` }]);
     }
-    const handleLoadFinishedGoods = (itemsToLoad: Omit<WarehouseItem, 'id'>[]) => {
-        const newItems = itemsToLoad.map(item => ({ ...item, id: generateUniqueId('wh_fg')}));
-        setWarehouseItems(prev => [...prev, ...newItems]);
-        toast.success(`${itemsToLoad.length} finished good item(s) loaded into warehouse.`);
+    toast.success('Supplier saved.');
+  };
+
+  const handleDeleteSupplier = (supplierId: string) => {
+    setSuppliers(prev => prev.filter(s => s.id !== supplierId));
+    toast.success('Supplier deleted.');
+  };
+  
+  const handleSaveCustomer = (customerData: Customer | Omit<Customer, 'id'>) => {
+    if ('id' in customerData) {
+        setCustomers(prev => prev.map(c => c.id === customerData.id ? customerData : c));
+    } else {
+        setCustomers(prev => [...prev, { ...customerData, id: `cust_${Date.now()}` }]);
     }
-     const handleUnloadWarehouseItems = (itemsToUnload: Omit<WarehouseItem, 'id'>[]) => {
-        setWarehouseItems(currentItems => {
-            const updatedItems = [...currentItems];
-            itemsToUnload.forEach(unloadItem => {
-                const itemIndex = updatedItems.findIndex(i => i.masterItemId === unloadItem.masterItemId && i.lotNumber === unloadItem.lotNumber);
-                if (itemIndex > -1) {
-                    updatedItems[itemIndex].quantity -= unloadItem.quantity;
-                }
-            });
-            return updatedItems.filter(i => i.quantity > 0.01);
-        });
-        toast.success(`${itemsToUnload.length} item(s) unloaded from warehouse.`);
-        
-        const currentPage = typeof page === 'string' ? page : page.page;
-        if(currentPage === Page.WarehouseFinishedGoods) {
-            handleNavigate(Page.WarehouseFinishedGoods);
-        } else if (currentPage !== Page.Batches) { // Avoid navigating away from the batch page
-             handleNavigate(Page.Warehouse);
-        }
+    toast.success('Customer saved.');
+  };
+  const handleDeleteCustomer = (customerId: string) => {
+    setCustomers(prev => prev.filter(c => c.id !== customerId));
+    toast.success('Customer deleted.');
+  };
+
+  const handleSaveLocation = (locationData: Location | Omit<Location, 'id'>) => {
+    if ('id' in locationData) {
+        setLocations(prev => prev.map(l => l.id === locationData.id ? locationData : l));
+    } else {
+        setLocations(prev => [...prev, { ...locationData, id: `loc_${Date.now()}` }]);
     }
+    toast.success('Location saved.');
+  };
+  const handleDeleteLocation = (locationId: string) => {
+    setLocations(prev => prev.filter(l => l.id !== locationId));
+    toast.success('Location deleted.');
+  };
+  
+  const handleSavePriceList = (priceList: CustomerPriceList) => {
+    if (customerPriceLists.some(pl => pl.id === priceList.id)) {
+        setCustomerPriceLists(prev => prev.map(pl => pl.id === priceList.id ? priceList : pl));
+    } else {
+        setCustomerPriceLists(prev => [...prev, { ...priceList, id: `cpl_${Date.now()}` }]);
+    }
+    toast.success('Price list saved!');
+  };
 
-    // Suppliers
-    const handleSaveSupplier = (supplierToSave: Supplier | Omit<Supplier, 'id'>) => {
-        if ('id' in supplierToSave) {
-            setSuppliers(suppliers.map(s => s.id === supplierToSave.id ? supplierToSave : s));
-            toast.success('Supplier updated.');
-        } else {
-            setSuppliers([...suppliers, { ...supplierToSave, id: generateUniqueId('sup') }]);
-            toast.success('Supplier created.');
-        }
-    };
-    const handleDeleteSupplier = (supplierId: string) => {
-        setSuppliers(suppliers.filter(s => s.id !== supplierId));
-        toast.success('Supplier deleted.');
-    };
-
-     // Customers
-    const handleSaveCustomer = (customerToSave: Customer | Omit<Customer, 'id'>) => {
-        if ('id' in customerToSave) {
-            setCustomers(customers.map(c => c.id === customerToSave.id ? customerToSave : c));
-            toast.success('Customer updated.');
-        } else {
-            setCustomers([...customers, { ...customerToSave, id: generateUniqueId('cust') }]);
-            toast.success('Customer created.');
-        }
-    };
-    const handleDeleteCustomer = (customerId: string) => {
-        setCustomers(customers.filter(s => s.id !== customerId));
-        toast.success('Customer deleted.');
-    };
-
-    // Orders
-    const handleSaveOrder = (orderToSave: Order) => {
-        if ('id' in orderToSave && orderToSave.id) {
-            setOrders(orders.map(o => o.id === orderToSave.id ? orderToSave : o));
-            toast.success(`Order ${orderToSave.orderNumber} updated successfully!`);
-        } else {
-            const newOrder = { ...orderToSave, id: generateUniqueId('order') };
-            setOrders(prev => [...prev, newOrder].sort((a,b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime()));
-            toast.success(`Order ${orderToSave.orderNumber} created successfully!`);
-        }
-        handleNavigate(Page.Orders);
-    };
-    const handleDeleteOrder = (orderId: string) => {
-        setOrders(orders.filter(o => o.id !== orderId));
-        toast.success('Order deleted.');
-    };
-
-    // Locations
-    const handleSaveLocation = (locationToSave: Location | Omit<Location, 'id'>) => {
-         if ('id' in locationToSave) {
-            setLocations(locations.map(l => l.id === locationToSave.id ? locationToSave : l));
-            toast.success('Location updated.');
-        } else {
-            setLocations([...locations, { ...locationToSave, id: generateUniqueId('loc') }]);
-            toast.success('Location created.');
-        }
-    };
-    const handleDeleteLocation = (locationId: string) => {
-        setLocations(locations.filter(l => l.id !== locationId));
-        toast.success('Location deleted.');
-    };
-
-    // Categories
-    const handleSaveCategory = (categoryToSave: Category | Omit<Category, 'id'>) => {
-        if ('id' in categoryToSave) {
-            setCategories(categories.map(c => c.id === categoryToSave.id ? categoryToSave : c));
-            toast.success('Category updated.');
-        } else {
-            setCategories([...categories, { ...categoryToSave, id: generateUniqueId('cat') }]);
-            toast.success('Category created.');
-        }
-    };
-
-    const handleDeleteCategory = (categoryId: string) => {
-        const childCategoryIds = categories.filter(c => c.parentCategoryId === categoryId).map(c => c.id);
-        const idsToDelete = [categoryId, ...childCategoryIds];
-
-        setCategories(categories.filter(c => !idsToDelete.includes(c.id)));
-        toast.success('Category and its subcategories deleted.');
-    };
-    
-    const renderPage = () => {
-        const currentPage = typeof page === 'string' ? page : page.page;
-        const pageId = typeof page === 'object' ? page.id : undefined;
-
-        switch (currentPage) {
-            case Page.Dashboard:
-                return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
-            case Page.Batches:
-                if (pageId) {
-                    const batch = batches.find(b => b.id === pageId);
-                    if (batch) {
-                        return <BrewSheetPage 
-                                    batch={batch} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations}
-                                    onBack={() => handleNavigate(Page.Batches)} 
-                                    onSave={handleSaveBatch}
-                                    onUnloadItems={handleUnloadWarehouseItems}
-                                    onLoadFinishedGoods={handleLoadFinishedGoods}
-                                />;
-                    }
-                }
-                return <BatchesListPage 
-                            batches={batches} recipes={recipes} locations={locations} 
-                            onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} 
-                            onCreateBatch={handleCreateBatch}
-                            onDeleteBatch={handleDeleteBatch}
-                        />;
-            case Page.Calendar:
-                return <CalendarPage batches={batches} recipes={recipes} locations={locations} masterItems={masterItems} categories={categories} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} />;
-            case Page.QualityControl:
-                return <QualityControlPage batches={batches} recipes={recipes} />;
+  const renderPage = () => {
+    if (formState) {
+        switch (formState.page) {
             case Page.Recipes:
-                if (pageId) {
-                    const recipe = recipes.find(r => r.id === pageId) || null;
-                    return <RecipeFormPage recipe={recipe} masterItems={masterItems} categories={categories} onSave={handleSaveRecipe} onBack={() => handleNavigate(Page.Recipes)} />;
-                }
-                 if (pageId === 'new') { // Special case for new
-                    return <RecipeFormPage recipe={null} masterItems={masterItems} categories={categories} onSave={handleSaveRecipe} onBack={() => handleNavigate(Page.Recipes)} />;
-                }
-                return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => handleNavigate({ page: Page.Recipes, id: 'new'})} onEditRecipe={(recipe) => handleNavigate({ page: Page.Recipes, id: recipe.id })} onDeleteRecipe={handleDeleteRecipe} />;
-            case Page.Warehouse:
-                 if (pageId === 'load') {
-                    return <WarehouseLoadFormPage masterItems={rawMaterialMasterItems} locations={locations} onSave={handleLoadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
-                }
-                 if (pageId === 'unload') {
-                    return <WarehouseUnloadFormPage masterItems={rawMaterialMasterItems} warehouseItems={rawMaterialWarehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.Warehouse)} />;
-                }
-                return <WarehousePage 
-                            warehouseItems={rawMaterialWarehouseItems} masterItems={masterItems} locations={locations} categories={categories}
-                            onLoadItems={() => handleNavigate({ page: Page.Warehouse, id: 'load'})}
-                            onUnloadItems={() => handleNavigate({ page: Page.Warehouse, id: 'unload'})}
-                            onMoveItems={() => {}} // Placeholder
-                            title={t('Raw Materials Warehouse')}
-                            showLoadButton={true}
-                        />;
-            case Page.WarehouseFinishedGoods:
-                if (pageId === 'unload') {
-                    return <WarehouseUnloadFormPage masterItems={finishedGoodsMasterItems} warehouseItems={finishedGoodsWarehouseItems} onSave={handleUnloadWarehouseItems} onBack={() => handleNavigate(Page.WarehouseFinishedGoods)} />;
-                }
-                return <WarehousePage 
-                            warehouseItems={finishedGoodsWarehouseItems} masterItems={masterItems} locations={locations} categories={categories}
-                            onLoadItems={() => {}} // No manual loading for FG
-                            onUnloadItems={() => handleNavigate({ page: Page.WarehouseFinishedGoods, id: 'unload'})}
-                            onMoveItems={() => {}} // Placeholder
-                            title={t('Finished Goods Warehouse')}
-                            showLoadButton={false}
-                        />;
+                const recipe = formState.mode === 'edit' ? recipes.find(r => r.id === formState.id) : null;
+                return <RecipeFormPage recipe={recipe} masterItems={masterItems} categories={categories} administrationSettings={adminSettings} onSave={handleSaveRecipe} onBack={goBack} />;
             case Page.Items:
-                 if (pageId) {
-                    const item = masterItems.find(i => i.id === pageId) || null;
-                    return <ItemFormPage item={item} categories={categories} suppliers={suppliers} onSave={handleSaveItem} onBack={() => handleNavigate(Page.Items)} />;
-                }
-                 if (pageId === 'new') { // Special case for new
-                    return <ItemFormPage item={null} categories={categories} suppliers={suppliers} onSave={handleSaveItem} onBack={() => handleNavigate(Page.Items)} />;
-                }
-                return <ItemsPage masterItems={masterItems} categories={categories} onNewItem={() => handleNavigate({ page: Page.Items, id: 'new'})} onEditItem={(item) => handleNavigate({ page: Page.Items, id: item.id })} onDeleteItem={handleDeleteItem} />;
-            case Page.Suppliers:
-                return <SuppliersPage suppliers={suppliers} onSaveSupplier={handleSaveSupplier} onDeleteSupplier={handleDeleteSupplier} />;
-            case Page.Locations:
-                return <LocationsPage locations={locations} onSaveLocation={handleSaveLocation} onDeleteLocation={handleDeleteLocation} />;
-            case Page.Analysis:
-                return <AnalysisPage batches={batches} recipes={recipes} masterItems={masterItems} categories={categories} warehouseItems={warehouseItems} />;
-            case Page.ProductionPlan:
-                return <ProductionPlanPage 
-                            recipes={recipes}
-                            masterItems={masterItems}
-                            warehouseItems={warehouseItems}
-                            categories={categories}
-                            suppliers={suppliers}
-                            batches={batches}
-                        />;
-            case Page.Tools:
-                return <ToolsPage />;
-            case Page.Settings:
-                return <SettingsPage 
-                            categories={categories}
-                            onSaveCategory={handleSaveCategory}
-                            onDeleteCategory={handleDeleteCategory}
-                        />;
+                const item = formState.mode === 'edit' ? masterItems.find(i => i.id === formState.id) : null;
+                return <ItemFormPage item={item} categories={categories} suppliers={suppliers} onSave={handleSaveMasterItem} onBack={goBack} />;
+            case Page.Warehouse:
+                if (formState.mode === 'load') return <WarehouseLoadFormPage masterItems={masterItems} locations={locations} onSave={handleLoadItems} onBack={goBack} />;
+                if (formState.mode === 'unload') return <WarehouseUnloadFormPage masterItems={masterItems} warehouseItems={warehouseItems} onSave={handleUnloadItems} onBack={goBack} />;
+                break;
             case Page.Orders:
-                if (pageId === 'new') {
-                    return <OrderFormPage 
-                                order={null} 
-                                customers={customers}
-                                masterItems={masterItems}
-                                categories={categories}
-                                onSave={handleSaveOrder} 
-                                onBack={() => handleNavigate(Page.Orders)} />;
-                }
-                if (pageId) {
-                    const order = orders.find(o => o.id === pageId) || null;
-                    return <OrderFormPage 
-                                order={order} 
-                                customers={customers}
-                                masterItems={masterItems}
-                                categories={categories}
-                                onSave={handleSaveOrder} 
-                                onBack={() => handleNavigate(Page.Orders)} />;
-                }
-                return <OrdersListPage
-                            orders={orders}
-                            customers={customers}
-                            onNewOrder={() => handleNavigate({ page: Page.Orders, id: 'new'})}
-                            onSelectOrder={(order) => handleNavigate({ page: Page.Orders, id: order.id })}
-                            onDeleteOrder={handleDeleteOrder}
-                        />;
-            case Page.Customers:
-                return <CustomersPage 
-                            customers={customers}
-                            onSaveCustomer={handleSaveCustomer}
-                            onDeleteCustomer={handleDeleteCustomer}
-                        />;
-            default:
-                return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
+                const order = formState.mode === 'edit' ? orders.find(o => o.id === formState.id) : null;
+                return <OrderFormPage order={order} customers={customers} masterItems={masterItems} categories={categories} onSave={handleSaveOrder} onBack={goBack} />;
         }
-    };
-    
-    return (
-        <div className="bg-color-background text-color-text h-screen flex overflow-hidden">
-            <Sidebar 
-                currentPage={typeof page === 'string' ? page : page.page} 
-                onNavigate={handleNavigate} 
-                isOpen={isSidebarOpen}
-                onClose={() => setIsSidebarOpen(false)}
-            />
-             {/* Overlay for mobile */}
-            {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
-            <main className="flex-1 p-4 md:p-6 overflow-y-auto">
-                 {/* Hamburger button for mobile */}
-                <button 
-                    className="md:hidden p-1 mb-4 text-gray-400 hover:text-white"
-                    onClick={() => setIsSidebarOpen(true)}
-                    aria-label="Open menu"
-                >
-                    <MenuIcon className="w-6 h-6"/>
-                </button>
-                {renderPage()}
-            </main>
+    }
+
+    if (selectedId) {
+        switch (currentPage) {
+            case Page.Batches:
+                const batch = batches.find(b => b.id === selectedId);
+                return batch ? <BrewSheetPage batch={batch} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations} onBack={goBack} onSave={handleSaveBatch} onUnloadItems={handleUnloadItems} onLoadFinishedGoods={handleLoadFinishedGoods} /> : <p>Batch not found</p>;
+            case Page.Orders:
+                 const order = orders.find(o => o.id === selectedId);
+                 return <OrderFormPage order={order} customers={customers} masterItems={masterItems} categories={categories} onSave={handleSaveOrder} onBack={goBack} />;
+        }
+    }
+
+    switch (currentPage) {
+        case Page.Dashboard: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
+        case Page.Batches: return <BatchesListPage batches={batches} recipes={recipes} locations={locations} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} onCreateBatch={handleCreateBatch} onDeleteBatch={handleDeleteBatch} />;
+        case Page.Recipes: return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => openForm(Page.Recipes, 'new')} onEditRecipe={(recipe) => openForm(Page.Recipes, 'edit', recipe.id)} onDeleteRecipe={handleDeleteRecipe} />;
+        case Page.Calendar: return <CalendarPage batches={batches} recipes={recipes} locations={locations} masterItems={masterItems} categories={categories} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} />;
+        case Page.Warehouse: return <WarehousePage warehouseItems={warehouseItems} masterItems={masterItems} locations={locations} categories={categories} onLoadItems={() => openForm(Page.Warehouse, 'load')} onUnloadItems={() => openForm(Page.Warehouse, 'unload')} onMoveItems={() => {}} title={'Warehouse'} showLoadButton={true} />;
+        case Page.Items: return <ItemsPage masterItems={masterItems} categories={categories} onNewItem={() => openForm(Page.Items, 'new')} onEditItem={(item) => openForm(Page.Items, 'edit', item.id)} onDeleteItem={handleDeleteMasterItem} />;
+        case Page.ProductionPlan: return <ProductionPlanPage recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} suppliers={suppliers} batches={batches} />;
+        case Page.Analysis: return <AnalysisPage batches={batches} recipes={recipes} masterItems={masterItems} categories={categories} warehouseItems={warehouseItems} />;
+        case Page.QualityControl: return <QualityControlPage batches={batches} recipes={recipes} />;
+        case Page.Orders: return <OrdersListPage orders={orders} customers={customers} onNewOrder={() => openForm(Page.Orders, 'new')} onSelectOrder={(order) => handleNavigate({ page: Page.Orders, id: order.id })} onDeleteOrder={handleDeleteOrder} />;
+        case Page.Customers: return <CustomersPage customers={customers} onSaveCustomer={handleSaveCustomer} onDeleteCustomer={handleDeleteCustomer} />;
+        case Page.Suppliers: return <SuppliersPage suppliers={suppliers} onSaveSupplier={handleSaveSupplier} onDeleteSupplier={handleDeleteSupplier} />;
+        case Page.Locations: return <LocationsPage locations={locations} onSaveLocation={handleSaveLocation} onDeleteLocation={handleDeleteLocation} />;
+        case Page.ProductionCosts: return <ProductionCostsPage recipes={recipes} masterItems={masterItems} administrationSettings={adminSettings} onSaveAdministrationSettings={setAdminSettings} />;
+        case Page.PriceList: return <PriceListPage recipes={recipes} masterItems={masterItems} administrationSettings={adminSettings} onSaveMultipleItems={(items) => { const newItems = [...masterItems]; items.forEach(i => { const index = newItems.findIndex(mi => mi.id === i.id); if (index !== -1) newItems[index] = i; }); setMasterItems(newItems); toast.success('Prices saved!'); }} />;
+        case Page.CustomerPriceLists: return <CustomerPriceListsPage recipes={recipes} masterItems={masterItems} customers={customers} administrationSettings={adminSettings} customerPriceLists={customerPriceLists} onSavePriceList={handleSavePriceList} />;
+        case Page.Shipping: return <ShippingPage transportDocuments={transportDocuments} orders={orders} customers={customers} onNewDocument={(orderId) => toast.info('Creating transport documents is not yet implemented.')} onSelectDocument={(doc) => toast.info('Editing transport documents is not yet implemented.')} onDeleteDocument={(docId) => setTransportDocuments(prev => prev.filter(d => d.id !== docId))} />;
+        case Page.Tools: return <ToolsPage />;
+        case Page.Settings: return <SettingsPage categories={categories} onSaveCategory={handleSaveCategory} onDeleteCategory={handleDeleteCategory} batchNumberingSettings={batchNumberingSettings} onSaveBatchNumberingSettings={setBatchNumberingSettings} batches={batches} />;
+        default: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-color-background text-color-text font-sans">
+      <Sidebar currentPage={currentPage} onNavigate={handleNavigate} isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="md:hidden p-4 flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-md hover:bg-color-surface">
+            <MenuIcon className="w-6 h-6" />
+          </button>
         </div>
-    );
+        <div className="flex-1 overflow-y-auto p-4 md:p-6">
+          {renderPage()}
+        </div>
+      </main>
+    </div>
+  );
 };
 
 export default App;
