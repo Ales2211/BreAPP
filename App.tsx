@@ -1,17 +1,19 @@
-
 import React, { useState } from 'react';
 import {
   Page, Recipe, BrewSheet, MasterItem, WarehouseItem, Category, Location, Supplier, Customer, Order,
-  BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument
+  BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument, WarehouseMovement
 } from './types';
 import { Sidebar } from './components/Sidebar';
 import { MenuIcon } from './components/Icons';
 import usePersistentState from './hooks/usePersistentState';
 import { useToast } from './hooks/useToast';
+// FIX: Import useTranslation hook to provide the 't' function for localization.
+import { useTranslation } from './hooks/useTranslation';
 import {
   mockRecipes, mockBatches, mockMasterItems, mockWarehouseItems, mockCategories,
   mockLocations, mockSuppliers, mockCustomers, mockOrders, mockBatchNumberingSettings,
-  mockAdminSettings, mockCustomerPriceLists, mockTransportDocuments, generateBrewSheetFromRecipe
+  mockAdminSettings, mockCustomerPriceLists, mockTransportDocuments, generateBrewSheetFromRecipe,
+  mockWarehouseMovements
 } from './data/mockData';
 
 // Import all page components
@@ -22,6 +24,7 @@ import RecipesPage from './pages/RecipesPage';
 import RecipeFormPage from './pages/RecipeFormPage';
 import CalendarPage from './pages/CalendarPage';
 import WarehousePage from './pages/WarehousePage';
+import WarehouseMovementsPage from './pages/WarehouseMovementsPage';
 import ItemsPage from './pages/ItemsPage';
 import ItemFormPage from './pages/ItemFormPage';
 import ProductionPlanPage from './pages/ProductionPlanPage';
@@ -47,6 +50,7 @@ const App: React.FC = () => {
   const [batches, setBatches] = usePersistentState<BrewSheet[]>('batches', mockBatches);
   const [masterItems, setMasterItems] = usePersistentState<MasterItem[]>('masterItems', mockMasterItems);
   const [warehouseItems, setWarehouseItems] = usePersistentState<WarehouseItem[]>('warehouseItems', mockWarehouseItems);
+  const [warehouseMovements, setWarehouseMovements] = usePersistentState<WarehouseMovement[]>('warehouseMovements', mockWarehouseMovements);
   const [categories, setCategories] = usePersistentState<Category[]>('categories', mockCategories);
   const [locations, setLocations] = usePersistentState<Location[]>('locations', mockLocations);
   const [suppliers, setSuppliers] = usePersistentState<Supplier[]>('suppliers', mockSuppliers);
@@ -61,6 +65,8 @@ const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>(Page.Dashboard);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const toast = useToast();
+  // FIX: Initialize useTranslation hook to get the 't' function.
+  const { t } = useTranslation();
 
   // State for detail/form pages
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -125,6 +131,22 @@ const App: React.FC = () => {
     setRecipes(prev => prev.filter(r => r.id !== recipeId));
     toast.success('Recipe deleted!');
   };
+  const handleDuplicateRecipe = (recipeId: string) => {
+    const originalRecipe = recipes.find(r => r.id === recipeId);
+    if (!originalRecipe) {
+        toast.error('Could not find recipe to duplicate.');
+        return;
+    }
+
+    const newRecipe = {
+        ...JSON.parse(JSON.stringify(originalRecipe)), // Deep copy
+        id: `recipe_${Date.now()}`,
+        name: `${originalRecipe.name} (Copy)`,
+    };
+    
+    setRecipes(prev => [...prev, newRecipe]);
+    toast.success(`Recipe "${originalRecipe.name}" duplicated successfully!`);
+  };
   
   // Items
   const handleSaveMasterItem = (itemData: MasterItem | Omit<MasterItem, 'id'>) => {
@@ -145,36 +167,157 @@ const App: React.FC = () => {
 
   // Warehouse
   const handleLoadItems = (items: Omit<WarehouseItem, 'id'>[]) => {
-    const newItems: WarehouseItem[] = items.map(item => ({
-        ...item,
-        id: `wh_${Date.now()}_${Math.random()}`
-    }));
+    const newItems: WarehouseItem[] = [];
+    const newMovements: WarehouseMovement[] = [];
+    const timestamp = new Date().toISOString();
+
+    items.forEach(item => {
+        const newItemId = `wh_${Date.now()}_${Math.random()}`;
+        newItems.push({ ...item, id: newItemId });
+        newMovements.push({
+            id: `mov_${newItemId}`,
+            timestamp,
+            type: 'load',
+            masterItemId: item.masterItemId,
+            lotNumber: item.lotNumber,
+            quantity: item.quantity,
+            locationId: item.locationId,
+            documentNumber: item.documentNumber,
+        });
+    });
+
     setWarehouseItems(prev => [...prev, ...newItems]);
+    setWarehouseMovements(prev => [...prev, ...newMovements]);
     toast.success(`${items.length} item(s) loaded into warehouse.`);
     goBack();
   };
 
-  const handleUnloadItems = (items: Omit<WarehouseItem, 'id'>[]) => {
-    setWarehouseItems(prev => {
-        const newWhItems = [...prev];
-        items.forEach(itemToUnload => {
-            let remainingQty = itemToUnload.quantity;
-            const relevantLots = newWhItems
-                .filter(i => i.masterItemId === itemToUnload.masterItemId && i.lotNumber === itemToUnload.lotNumber)
-                .sort((a,b) => new Date(a.arrivalDate).getTime() - new Date(b.arrivalDate).getTime());
+  const handleUnloadItems = (itemsToUnload: Omit<WarehouseItem, 'id'>[], type: 'unload' | 'brew_unload') => {
+    const newMovements: WarehouseMovement[] = [];
+    const timestamp = new Date().toISOString();
+    
+    const deepCopiedItems = JSON.parse(JSON.stringify(warehouseItems)) as WarehouseItem[];
 
-            for (const lot of relevantLots) {
-                if (remainingQty <= 0) break;
-                const toRemove = Math.min(remainingQty, lot.quantity);
-                lot.quantity -= toRemove;
-                remainingQty -= toRemove;
-            }
-        });
-        return newWhItems.filter(i => i.quantity > 0.001);
+    itemsToUnload.forEach(itemToUnload => {
+        let remainingQtyToUnload = itemToUnload.quantity;
+        const relevantLots = deepCopiedItems
+            .filter(i => i.masterItemId === itemToUnload.masterItemId && i.lotNumber === itemToUnload.lotNumber)
+            .sort((a, b) => new Date(a.arrivalDate).getTime() - new Date(b.arrivalDate).getTime());
+
+        for (const lot of relevantLots) {
+            if (remainingQtyToUnload <= 0) break;
+            const qtyToRemove = Math.min(remainingQtyToUnload, lot.quantity);
+            
+            lot.quantity -= qtyToRemove;
+            remainingQtyToUnload -= qtyToRemove;
+
+            newMovements.push({
+                id: `mov_unload_${Date.now()}_${Math.random()}`,
+                timestamp,
+                type: type,
+                masterItemId: itemToUnload.masterItemId,
+                lotNumber: itemToUnload.lotNumber,
+                quantity: -qtyToRemove,
+                locationId: lot.locationId,
+                documentNumber: itemToUnload.documentNumber,
+            });
+        }
     });
-    toast.success(`${items.length} type(s) of items unloaded from warehouse.`);
+    
+    const finalItems = deepCopiedItems.filter(i => i.quantity > 0.001);
+    
+    setWarehouseItems(finalItems);
+    setWarehouseMovements(prev => [...prev, ...newMovements]);
+    toast.success(`${itemsToUnload.length} type(s) of items unloaded from warehouse.`);
     goBack();
-  };
+};
+
+const handleMoveItem = (details: { masterItemId: string; lotNumber: string; fromLocationId: string; toLocationId: string; quantity: number; }) => {
+    const { masterItemId, lotNumber, fromLocationId, toLocationId, quantity } = details;
+
+    setWarehouseItems(prevItems => {
+        let updatedItems = [...prevItems];
+
+        // Find the source item
+        const sourceItemIndex = updatedItems.findIndex(
+            item => item.masterItemId === masterItemId &&
+                    item.lotNumber === lotNumber &&
+                    item.locationId === fromLocationId
+        );
+
+        if (sourceItemIndex === -1) {
+            // FIX: Use 't' function for translation.
+            toast.error(t('Source item not found.'));
+            return prevItems;
+        }
+
+        const sourceItem = { ...updatedItems[sourceItemIndex] };
+
+        if (sourceItem.quantity < quantity) {
+            // FIX: Use 't' function for translation.
+            toast.error(t('Insufficient quantity to move.'));
+            return prevItems;
+        }
+
+        // Decrease source quantity
+        sourceItem.quantity -= quantity;
+
+        // Find or create destination item
+        const destItemIndex = updatedItems.findIndex(
+            item => item.masterItemId === masterItemId &&
+                    item.lotNumber === lotNumber &&
+                    item.locationId === toLocationId &&
+                    item.expiryDate === sourceItem.expiryDate // Match expiry date too
+        );
+
+        if (destItemIndex !== -1) {
+            // Destination item exists, update its quantity
+            updatedItems[destItemIndex] = {
+                ...updatedItems[destItemIndex],
+                quantity: updatedItems[destItemIndex].quantity + quantity,
+            };
+        } else {
+            // Destination item does not exist, create a new one
+            updatedItems.push({
+                id: `wh_${Date.now()}`,
+                masterItemId: sourceItem.masterItemId,
+                lotNumber: sourceItem.lotNumber,
+                quantity: quantity,
+                locationId: toLocationId,
+                arrivalDate: sourceItem.arrivalDate,
+                expiryDate: sourceItem.expiryDate,
+                documentNumber: sourceItem.documentNumber,
+            });
+        }
+        
+        // Update or remove source item
+        if (sourceItem.quantity < 0.001) {
+            updatedItems = updatedItems.filter((_, index) => index !== sourceItemIndex);
+        } else {
+            updatedItems[sourceItemIndex] = sourceItem;
+        }
+        
+        // Create movement logs
+        const timestamp = new Date().toISOString();
+        const documentNumber = `MOVE-${Date.now()}`;
+        const newMovements: WarehouseMovement[] = [
+            {
+                id: `mov_out_${Date.now()}`, timestamp, type: 'move', masterItemId, lotNumber,
+                quantity: -quantity, locationId: fromLocationId, documentNumber
+            },
+            {
+                id: `mov_in_${Date.now()}`, timestamp, type: 'move', masterItemId, lotNumber,
+                quantity: quantity, locationId: toLocationId, documentNumber
+            }
+        ];
+        setWarehouseMovements(prev => [...prev, ...newMovements]);
+
+        // FIX: Use 't' function for translation.
+        toast.success(t('Item moved successfully!'));
+        return updatedItems;
+    });
+};
+
 
   const handleLoadFinishedGoods = (items: Omit<WarehouseItem, 'id'>[]) => {
     handleLoadItems(items);
@@ -182,9 +325,9 @@ const App: React.FC = () => {
   };
 
   // Orders
-  const handleSaveOrder = (orderData: Order) => {
-    if (orders.some(o => o.id === orderData.id)) {
-        setOrders(prev => prev.map(o => o.id === orderData.id ? orderData : o));
+  const handleSaveOrder = (orderData: Order | Omit<Order, 'id'>) => {
+    if ('id' in orderData && orderData.id && orders.some(o => o.id === orderData.id)) {
+        setOrders(prev => prev.map(o => o.id === orderData.id ? orderData as Order : o));
         toast.success('Order updated!');
     } else {
         const newOrder = { ...orderData, id: `ord_${Date.now()}` };
@@ -272,7 +415,7 @@ const App: React.FC = () => {
                 return <ItemFormPage item={item} categories={categories} suppliers={suppliers} onSave={handleSaveMasterItem} onBack={goBack} />;
             case Page.Warehouse:
                 if (formState.mode === 'load') return <WarehouseLoadFormPage masterItems={masterItems} locations={locations} onSave={handleLoadItems} onBack={goBack} />;
-                if (formState.mode === 'unload') return <WarehouseUnloadFormPage masterItems={masterItems} warehouseItems={warehouseItems} onSave={handleUnloadItems} onBack={goBack} />;
+                if (formState.mode === 'unload') return <WarehouseUnloadFormPage masterItems={masterItems} warehouseItems={warehouseItems} onSave={(items) => handleUnloadItems(items, 'unload')} onBack={goBack} />;
                 break;
             case Page.Orders:
                 const order = formState.mode === 'edit' ? orders.find(o => o.id === formState.id) : null;
@@ -284,7 +427,7 @@ const App: React.FC = () => {
         switch (currentPage) {
             case Page.Batches:
                 const batch = batches.find(b => b.id === selectedId);
-                return batch ? <BrewSheetPage batch={batch} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations} onBack={goBack} onSave={handleSaveBatch} onUnloadItems={handleUnloadItems} onLoadFinishedGoods={handleLoadFinishedGoods} /> : <p>Batch not found</p>;
+                return batch ? <BrewSheetPage batch={batch} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations} onBack={goBack} onSave={handleSaveBatch} onUnloadItems={(items) => handleUnloadItems(items, 'brew_unload')} onLoadFinishedGoods={handleLoadFinishedGoods} /> : <p>Batch not found</p>;
             case Page.Orders:
                  const order = orders.find(o => o.id === selectedId);
                  return <OrderFormPage order={order} customers={customers} masterItems={masterItems} categories={categories} onSave={handleSaveOrder} onBack={goBack} />;
@@ -294,9 +437,10 @@ const App: React.FC = () => {
     switch (currentPage) {
         case Page.Dashboard: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
         case Page.Batches: return <BatchesListPage batches={batches} recipes={recipes} locations={locations} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} onCreateBatch={handleCreateBatch} onDeleteBatch={handleDeleteBatch} />;
-        case Page.Recipes: return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => openForm(Page.Recipes, 'new')} onEditRecipe={(recipe) => openForm(Page.Recipes, 'edit', recipe.id)} onDeleteRecipe={handleDeleteRecipe} />;
+        case Page.Recipes: return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => openForm(Page.Recipes, 'new')} onEditRecipe={(recipe) => openForm(Page.Recipes, 'edit', recipe.id)} onDeleteRecipe={handleDeleteRecipe} onDuplicateRecipe={handleDuplicateRecipe} />;
         case Page.Calendar: return <CalendarPage batches={batches} recipes={recipes} locations={locations} masterItems={masterItems} categories={categories} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} />;
-        case Page.Warehouse: return <WarehousePage warehouseItems={warehouseItems} masterItems={masterItems} locations={locations} categories={categories} onLoadItems={() => openForm(Page.Warehouse, 'load')} onUnloadItems={() => openForm(Page.Warehouse, 'unload')} onMoveItems={() => {}} title={'Warehouse'} showLoadButton={true} />;
+        case Page.Warehouse: return <WarehousePage warehouseItems={warehouseItems} masterItems={masterItems} locations={locations} categories={categories} onLoadItems={() => openForm(Page.Warehouse, 'load')} onUnloadItems={() => openForm(Page.Warehouse, 'unload')} onMoveItem={handleMoveItem} title={'Warehouse'} showLoadButton={true} />;
+        case Page.WarehouseMovements: return <WarehouseMovementsPage movements={warehouseMovements} masterItems={masterItems} locations={locations} categories={categories} />;
         case Page.Items: return <ItemsPage masterItems={masterItems} categories={categories} onNewItem={() => openForm(Page.Items, 'new')} onEditItem={(item) => openForm(Page.Items, 'edit', item.id)} onDeleteItem={handleDeleteMasterItem} />;
         case Page.ProductionPlan: return <ProductionPlanPage recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} suppliers={suppliers} batches={batches} />;
         case Page.Analysis: return <AnalysisPage batches={batches} recipes={recipes} masterItems={masterItems} categories={categories} warehouseItems={warehouseItems} />;

@@ -3,13 +3,14 @@ import { ChevronDownIcon } from '../Icons';
 
 interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
+  labelClassName?: string;
   containerClassName?: string;
 }
 
-const Select: React.FC<SelectProps> = ({ label, className, containerClassName, children, ...props }) => {
+const Select: React.FC<SelectProps> = ({ label, labelClassName, className, containerClassName, children, ...props }) => {
   return (
     <div className={`flex flex-col ${containerClassName ?? ''}`}>
-      {label && <label className="mb-1 text-sm font-medium text-gray-500">{label}</label>}
+      {label && <label className={`mb-1 text-sm font-medium text-gray-500 ${labelClassName ?? ''}`}>{label}</label>}
       <div className="relative">
         <select
           className={`w-full appearance-none bg-color-background border border-color-border rounded-md py-2 px-3 text-color-text focus:outline-none focus:border-color-accent focus:ring-1 focus:ring-color-accent transition-colors ${className}`}

@@ -3,6 +3,7 @@ export enum Page {
     Batches = 'Batches',
     Recipes = 'Recipes',
     Warehouse = 'Warehouse',
+    WarehouseMovements = 'WarehouseMovements',
     Items = 'Items',
     ProductionPlan = 'ProductionPlan',
     Analysis = 'Analysis',
@@ -78,6 +79,18 @@ export interface WarehouseItem {
   arrivalDate: string;
   expiryDate?: string;
   documentNumber?: string;
+}
+
+export interface WarehouseMovement {
+  id: string;
+  timestamp: string; // ISO string
+  type: 'load' | 'unload' | 'brew_unload' | 'move' | 'correction';
+  masterItemId: string;
+  lotNumber: string;
+  quantity: number; // positive for load/in, negative for unload/out
+  locationId: string;
+  documentNumber?: string;
+  notes?: string;
 }
 
 export interface Ingredient {

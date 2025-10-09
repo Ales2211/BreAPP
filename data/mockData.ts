@@ -1,4 +1,4 @@
-import { BrewSheet, Recipe, MasterItem, WarehouseItem, Category, Location, Supplier, Customer, Order, BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument } from '../types';
+import { BrewSheet, Recipe, MasterItem, WarehouseItem, Category, Location, Supplier, Customer, Order, BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument, WarehouseMovement } from '../types';
 
 export const mockCategories: Category[] = [
   { id: 'cat_malt', name: 'Malt' },
@@ -51,6 +51,12 @@ export const mockWarehouseItems: WarehouseItem[] = [
     { id: 'wh_2', masterItemId: 'item_5', lotNumber: 'YCH-CIT-001', quantity: 10, locationId: 'loc_1', arrivalDate: '2023-10-01' },
     { id: 'wh_3', masterItemId: 'item_8', lotNumber: 'FER-US05-001', quantity: 1000, locationId: 'loc_1', arrivalDate: '2023-10-01' },
     { id: 'wh_4', masterItemId: 'item_9', lotNumber: '24001', quantity: 500, locationId: 'loc_2', arrivalDate: '2024-01-15' },
+];
+
+export const mockWarehouseMovements: WarehouseMovement[] = [
+    { id: 'mov_1', timestamp: '2023-10-01T10:00:00Z', type: 'load', masterItemId: 'item_1', lotNumber: 'WM-PILS-001', quantity: 500, locationId: 'loc_1', documentNumber: 'DDT-123' },
+    { id: 'mov_2', timestamp: '2023-10-01T10:00:00Z', type: 'load', masterItemId: 'item_5', lotNumber: 'YCH-CIT-001', quantity: 10, locationId: 'loc_1', documentNumber: 'DDT-456' },
+    { id: 'mov_3', timestamp: '2024-01-15T14:00:00Z', type: 'load', masterItemId: 'item_9', lotNumber: '24001', quantity: 500, locationId: 'loc_2', documentNumber: 'PKG-24001' },
 ];
 
 export const mockRecipes: Recipe[] = [

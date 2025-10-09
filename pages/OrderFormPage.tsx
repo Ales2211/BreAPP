@@ -11,7 +11,7 @@ interface OrderFormPageProps {
   customers: Customer[];
   masterItems: MasterItem[];
   categories: Category[];
-  onSave: (order: Order) => void;
+  onSave: (order: Order | Omit<Order, 'id'>) => void;
   onBack: () => void;
 }
 
@@ -92,7 +92,7 @@ const OrderFormPage: React.FC<OrderFormPageProps> = ({ order, customers, masterI
             // Add toast notification for error
             return;
         }
-        onSave(formData as Order);
+        onSave(formData);
     };
     
     return (

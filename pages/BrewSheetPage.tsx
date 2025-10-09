@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep } from '../types';
+// FIX: Added BoilWhirlpoolIngredient and TankIngredient to imports to fix casting errors.
+import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep, BoilWhirlpoolIngredient, TankIngredient } from '../types';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
@@ -301,16 +302,29 @@ const LotAssignmentManager: React.FC<{
 
                 return (
                     <div key={expectedIng.id} className="bg-color-background/50 p-3 rounded-lg border border-color-border/30">
-                        {/* Compact Header */}
                         <div className="flex justify-between items-start mb-2 flex-wrap gap-y-1">
-                            <div className="flex-1 min-w-0">
-                               <div className="flex items-baseline space-x-4">
-                                    <h5 className="font-bold text-md text-color-text truncate">{masterItem.name}</h5>
-                                    <div className={`text-sm font-semibold text-right ${isComplete ? 'text-green-500' : 'text-orange-500'}`}>
-                                        <p><span className="font-mono">{totalAssigned.toFixed(2)} / {expectedIng.quantity.toFixed(2)}</span> {masterItem.unit}</p>
-                                    </div>
+                            <div className="flex-1 min-w-0 pr-4">
+                                <h5 className="font-bold text-md text-color-text truncate">{masterItem.name}</h5>
+                                <div className="flex flex-wrap gap-x-4 text-xs text-gray-500 mt-1">
+                                    {('type' in expectedIng && 'timing' in expectedIng) && (
+                                        <>
+                                            <span className="font-medium">{t('Phase')}: <span className="font-semibold text-color-text">{t((expectedIng as BoilWhirlpoolIngredient).type)}</span></span>
+                                            <span className="font-medium">{t('Timing')}: <span className="font-semibold text-color-text">{(expectedIng as BoilWhirlpoolIngredient).timing} min</span></span>
+                                            {(expectedIng as BoilWhirlpoolIngredient).temperature !== undefined && (
+                                                <span className="font-medium">{t('Temp.')}: <span className="font-semibold text-color-text">{(expectedIng as BoilWhirlpoolIngredient).temperature}°C</span></span>
+                                            )}
+                                        </>
+                                    )}
+                                    {('day' in expectedIng) && (
+                                        <span className="font-medium">{t('Day')}: <span className="font-semibold text-color-text">{(expectedIng as TankIngredient).day}</span></span>
+                                    )}
                                 </div>
-                                {<p className="text-xs text-gray-500">{t('Expected')}: {expectedIng.quantity.toFixed(2)} {masterItem.unit} {sackCount ? `/ ≈ ${sackCount} ${t('sacks')}` : ''}</p>}
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                                <div className={`text-sm font-semibold ${isComplete ? 'text-green-500' : 'text-orange-500'}`}>
+                                    <p><span className="font-mono">{totalAssigned.toFixed(2)} / {expectedIng.quantity.toFixed(2)}</span> {masterItem.unit}</p>
+                                </div>
+                                <p className="text-xs text-gray-500">{t('Expected')}: {expectedIng.quantity.toFixed(2)} {masterItem.unit} {sackCount ? `/ ≈ ${sackCount} ${t('sacks')}` : ''}</p>
                             </div>
                         </div>
 
@@ -976,7 +990,7 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
                                     {currentBatch.unloadStatus.boil ? t('Ingredients Unloaded') : t('Unload Ingredients')}
                                 </button>
                             </div>
-                            <LotAssignmentManager ingredients={currentBatch.boilLog.actual.ingredients as ActualIngredient[]} expectedIngredients={currentBatch.boilLog.expected.ingredients as Ingredient[]} masterItems={masterItems} warehouseItems={warehouseItems} onUpdate={(updated) => handleDeepChange('boilLog.actual.ingredients', updated)} t={t} />
+                            <LotAssignmentManager ingredients={currentBatch.boilLog.actual.ingredients as ActualIngredient[]} expectedIngredients={currentBatch.boilLog.expected.ingredients} masterItems={masterItems} warehouseItems={warehouseItems} onUpdate={(updated) => handleDeepChange('boilLog.actual.ingredients', updated)} t={t} />
                         </Card>
                     </div>
                 )}
@@ -1010,7 +1024,7 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
                                     {currentBatch.unloadStatus.fermentation ? t('Ingredients Unloaded') : t('Unload Ingredients')}
                                 </button>
                             </div>
-                            <LotAssignmentManager ingredients={currentBatch.fermentationLog.actual.additions as ActualIngredient[]} expectedIngredients={currentBatch.fermentationLog.expected.additions as Ingredient[]} masterItems={masterItems} warehouseItems={warehouseItems} onUpdate={(updated) => handleDeepChange('fermentationLog.actual.additions', updated)} t={t} />
+                            <LotAssignmentManager ingredients={currentBatch.fermentationLog.actual.additions as ActualIngredient[]} expectedIngredients={currentBatch.fermentationLog.expected.additions} masterItems={masterItems} warehouseItems={warehouseItems} onUpdate={(updated) => handleDeepChange('fermentationLog.actual.additions', updated)} t={t} />
                         </Card>
                         <Card title={t('Fermentation Log')}>
                             {currentBatch.fermentationLog.actual.logEntries.map((entry, index) => (

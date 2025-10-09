@@ -4,7 +4,7 @@ import { Logo } from './Logo';
 import {
     HomeIcon, BeakerIcon, BookOpenIcon, ArchiveIcon, TagIcon, ClipboardListIcon, ChartBarIcon,
     ClipboardCheckIcon, ShoppingBagIcon, UsersIcon, TruckIcon, BuildingStoreIcon, WrenchIcon,
-    CogIcon, CalendarIcon
+    CogIcon, CalendarIcon, HistoryIcon
 } from './Icons';
 import { useTranslation } from '../hooks/useTranslation';
 
@@ -29,6 +29,7 @@ const navItems = [
         labelKey: 'Sidebar_Warehouse',
         subItems: [
             { page: Page.Warehouse, icon: ArchiveIcon, labelKey: 'Warehouse' },
+            { page: Page.WarehouseMovements, icon: HistoryIcon, labelKey: 'Warehouse Movements' },
             { page: Page.Items, icon: TagIcon, labelKey: 'Items' },
         ]
     },

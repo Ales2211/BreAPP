@@ -3,12 +3,13 @@ import { ClockIcon } from '../Icons';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  labelClassName?: string;
   unit?: string;
   containerClassName?: string;
   showTimeNowButton?: boolean;
 }
 
-const Input: React.FC<InputProps> = ({ label, unit, className, containerClassName, showTimeNowButton, ...props }) => {
+const Input: React.FC<InputProps> = ({ label, labelClassName, unit, className, containerClassName, showTimeNowButton, ...props }) => {
     
     const handleNowClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
@@ -46,7 +47,7 @@ const Input: React.FC<InputProps> = ({ label, unit, className, containerClassNam
 
   return (
     <div className={`flex flex-col ${containerClassName ?? ''}`}>
-      {label && <label className="mb-1 text-sm font-medium text-gray-500">{label}</label>}
+      {label && <label className={`mb-1 text-sm font-medium text-gray-500 ${labelClassName ?? ''}`}>{label}</label>}
       <div className="relative">
         <input
           className={`w-full bg-color-background border border-color-border rounded-md py-2 pl-3 ${paddingRightClass} text-color-text focus:outline-none focus:border-color-accent focus:ring-1 focus:ring-color-accent transition-colors ${className}`}

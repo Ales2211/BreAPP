@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Recipe, MasterItem, Category, Ingredient, BoilWhirlpoolIngredient, MashStep, FermentationStep, TankIngredient, PackagedItemLink, QualityControlSpecification, QualityControlValueSpec, AdministrationSettings } from '../types';
 import Input from '../components/ui/Input';
@@ -129,10 +130,12 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
         <div className={`grid ${gridConfig[panelType]} gap-x-2 gap-y-1 items-start bg-color-background/50 p-2 rounded-md`}>
             <div className={`relative ${
                 panelType === 'mash' || panelType === 'packaging' ? 'col-span-12 md:col-span-8' :
-                panelType === 'boil' ? 'col-span-12 md:col-span-4' :
+                panelType === 'boil' ? 'col-span-12 md:col-span-3' :
                 'col-span-12 md:col-span-7'
             }`}>
                 <Input 
+                    label={t('Ingredient')}
+                    labelClassName="md:hidden"
                     placeholder={t('Search ingredient...')}
                     value={isFocused ? searchTerm : masterItem?.name || ''}
                     onChange={(e) => {
@@ -154,8 +157,10 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
                 )}
             </div>
 
-            <div className="col-span-8 md:col-span-3">
+            <div className="col-span-8 md:col-span-2">
                 <Input 
+                    label={t('Quantity')}
+                    labelClassName="md:hidden"
                     type="number" step="any" min="0"
                     value={item.quantity}
                     onChange={(e) => onUpdate(index, 'quantity', parseFloat(e.target.value) || 0)}
@@ -168,22 +173,51 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
             {panelType === 'boil' && (
                 <>
                     <div className="col-span-4 md:col-span-2">
-                        <Select value={(item as unknown as BoilWhirlpoolIngredient).type} onChange={e => onUpdate(index, 'type' as any, e.target.value)} className="py-1 h-[34px]">
+                        <Select 
+                            label={t('Phase')}
+                            labelClassName="md:hidden"
+                            value={(item as unknown as BoilWhirlpoolIngredient).type} 
+                            onChange={e => onUpdate(index, 'type' as any, e.target.value)} 
+                            className="py-1 h-[34px]"
+                        >
                             <option value="Boil">{t('Boil')}</option>
                             <option value="Whirlpool">{t('Whirlpool')}</option>
                         </Select>
                     </div>
-                    <div className="col-span-4 md:col-span-1">
-                        <Input type="number" value={(item as unknown as BoilWhirlpoolIngredient).timing} onChange={e => onUpdate(index, 'timing' as any, parseInt(e.target.value, 10))} unit="min" className="py-1" />
+                    <div className="col-span-4 md:col-span-2">
+                        <Input 
+                            label={t('Timing')}
+                            labelClassName="md:hidden"
+                            type="number" 
+                            value={(item as unknown as BoilWhirlpoolIngredient).timing} 
+                            onChange={e => onUpdate(index, 'timing' as any, parseInt(e.target.value, 10))} 
+                            unit="min" 
+                            className="py-1" 
+                        />
                     </div>
-                    <div className="col-span-4 md:col-span-1">
-                        {isWhirlpool && <Input type="number" value={(item as unknown as BoilWhirlpoolIngredient).temperature || ''} onChange={e => onUpdate(index, 'temperature' as any, parseInt(e.target.value, 10))} unit="°C" className="py-1" />}
+                    <div className="col-span-4 md:col-span-2">
+                        {isWhirlpool && <Input 
+                            label={t('Temp.')}
+                            labelClassName="md:hidden"
+                            type="number" 
+                            value={(item as unknown as BoilWhirlpoolIngredient).temperature || ''} 
+                            onChange={e => onUpdate(index, 'temperature' as any, parseInt(e.target.value, 10))} 
+                            unit="°C" 
+                            className="py-1" 
+                        />}
                     </div>
                 </>
             )}
             {panelType === 'tank' && (
                 <div className="col-span-4 md:col-span-1">
-                    <Input type="number" value={(item as unknown as TankIngredient).day} onChange={e => onUpdate(index, 'day' as any, parseInt(e.target.value, 10))} className="py-1" />
+                    <Input 
+                        label={t('Day')}
+                        labelClassName="md:hidden"
+                        type="number" 
+                        value={(item as unknown as TankIngredient).day} 
+                        onChange={e => onUpdate(index, 'day' as any, parseInt(e.target.value, 10))} 
+                        className="py-1" 
+                    />
                 </div>
             )}
 
@@ -387,51 +421,56 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                             </div>
                         </Card>
                         <Card title={t('Targets')} icon={<ThermometerIcon className="w-5 h-5"/>}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {targets.map(({ key, labelKey, unit, step }) => (
-                                    <div key={key} className="bg-color-background/60 p-4 rounded-lg border border-color-border/30">
-                                        <label className="block text-base font-semibold text-color-secondary mb-3">{t(labelKey)}</label>
-                                        
-                                        <div className="relative mb-4">
-                                            <Input
-                                                type="number"
-                                                step={step}
-                                                value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.target || ''}
-                                                onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'target', e.target.value)}
-                                                className="text-center text-xl font-mono py-2.5"
-                                                aria-label={`${t('Target')} ${t(labelKey)}`}
-                                            />
-                                            <span className="absolute top-1/2 -translate-y-1/2 right-3 text-sm text-gray-400 pointer-events-none">{unit}</span>
-                                        </div>
-                        
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div>
-                                                <label className="block text-xs text-gray-500 mb-1 text-center">{t('Min')}</label>
-                                                <Input
-                                                    type="number"
-                                                    step={step}
-                                                    value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.min ?? ''}
-                                                    onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'min', e.target.value)}
-                                                    placeholder="-"
-                                                    className="text-center font-mono"
-                                                    aria-label={`${t('Min')} ${t(labelKey)}`}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs text-gray-500 mb-1 text-center">{t('Max')}</label>
-                                                <Input
-                                                    type="number"
-                                                    step={step}
-                                                    value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.max ?? ''}
-                                                    onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'max', e.target.value)}
-                                                    placeholder="-"
-                                                    className="text-center font-mono"
-                                                    aria-label={`${t('Max')} ${t(labelKey)}`}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="border-b-2 border-color-border/50">
+                                        <tr>
+                                            <th className="p-2 w-1/3">{t('Parameter')}</th>
+                                            <th className="p-2 text-center">{t('Target')}</th>
+                                            <th className="p-2 text-center">{t('Min')}</th>
+                                            <th className="p-2 text-center">{t('Max')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-color-border/20">
+                                        {targets.map(({ key, labelKey, unit, step }) => (
+                                            <tr key={key}>
+                                                <td className="p-2 font-semibold text-color-secondary">{t(labelKey)} ({unit})</td>
+                                                <td className="p-2">
+                                                    <Input
+                                                        type="number"
+                                                        step={step}
+                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.target || ''}
+                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'target', e.target.value)}
+                                                        className="text-center font-mono w-full"
+                                                        aria-label={`${t('Target')} ${t(labelKey)}`}
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                     <Input
+                                                        type="number"
+                                                        step={step}
+                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.min ?? ''}
+                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'min', e.target.value)}
+                                                        placeholder="-"
+                                                        className="text-center font-mono w-full"
+                                                        aria-label={`${t('Min')} ${t(labelKey)}`}
+                                                    />
+                                                </td>
+                                                <td className="p-2">
+                                                     <Input
+                                                        type="number"
+                                                        step={step}
+                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.max ?? ''}
+                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'max', e.target.value)}
+                                                        placeholder="-"
+                                                        className="text-center font-mono w-full"
+                                                        aria-label={`${t('Max')} ${t(labelKey)}`}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </Card>
                     </div>
@@ -449,7 +488,7 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                             </button>
                         </Card>
                          <Card title={t('Boil & Whirlpool')} icon={<HopsIcon className="w-5 h-5" />}>
-                            {formData.boilWhirlpoolIngredients.length > 0 && <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-2"><div className="col-span-4">{t('Ingredient')}</div><div className="col-span-3">{t('Quantity')}</div><div className="col-span-2">{t('Type')}</div><div className="col-span-1">{t('Timing')}</div><div className="col-span-1">{t('Temp.')}</div><div className="col-span-1 text-right">{t('Actions')}</div></div>}
+                            {formData.boilWhirlpoolIngredients.length > 0 && <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-2"><div className="col-span-3">{t('Ingredient')}</div><div className="col-span-2">{t('Quantity')}</div><div className="col-span-2">{t('Phase')}</div><div className="col-span-2">{t('Timing')}</div><div className="col-span-2">{t('Temp.')}</div><div className="col-span-1 text-right">{t('Actions')}</div></div>}
                              <div className="space-y-2">
                                 {formData.boilWhirlpoolIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('boilWhirlpoolIngredients', formData.boilWhirlpoolIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('boilWhirlpoolIngredients', formData.boilWhirlpoolIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Hops', 'Spices', 'Sugar', 'Category_Other']} panelType="boil" litersForGl={formData.qualityControlSpec.liters.target} />)}
                             </div>

@@ -66,6 +66,16 @@
         /* Filter generated to approximate the color-accent orange (#fd7e14) */
         filter: invert(62%) sepia(88%) saturate(1450%) hue-rotate(350deg) brightness(101%) contrast(98%);
       }
+
+      /* Hide number input spinners for better control */
+      input[type=number]::-webkit-inner-spin-button, 
+      input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+      }
+      input[type=number] {
+        -moz-appearance: textfield; /* Firefox */
+      }
     </style>
     <!-- PDF & Excel Generation Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
