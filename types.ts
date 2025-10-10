@@ -245,6 +245,7 @@ export interface BrewSheet {
   cookDate: string; // YYYY-MM-DD
   fermenterId: string;
   status: 'Planned' | 'In Progress' | 'Fermenting' | 'Packaged' | 'Completed';
+  linkedBatchId?: string; // ID of the parent batch if this is a double batch turn
   
   unloadStatus: {
       mash: boolean;

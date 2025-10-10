@@ -1,16 +1,17 @@
 import React, { useState, useMemo, useEffect } from 'react';
 // FIX: Added BoilWhirlpoolIngredient and TankIngredient to imports to fix casting errors.
-import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep, BoilWhirlpoolIngredient, TankIngredient } from '../types';
+import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep, BoilWhirlpoolIngredient, TankIngredient, Page } from '../types';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from '../hooks/useTranslation';
 import { useToast } from '../hooks/useToast';
-import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MashTunIcon, DropletIcon, ThermometerIcon, YeastIcon, BottleIcon, DownloadIcon, ArrowRightIcon, WrenchIcon } from '../components/Icons';
+import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MashTunIcon, DropletIcon, ThermometerIcon, YeastIcon, BottleIcon, DownloadIcon, ArrowRightIcon, WrenchIcon, LinkIcon } from '../components/Icons';
 
 interface BrewSheetPageProps {
   batch: BrewSheet;
+  allBatches: BrewSheet[];
   recipes: Recipe[];
   masterItems: MasterItem[];
   warehouseItems: WarehouseItem[];
@@ -20,6 +21,7 @@ interface BrewSheetPageProps {
   onSave: (batch: BrewSheet) => void;
   onUnloadItems: (items: Omit<WarehouseItem, 'id'>[]) => void;
   onLoadFinishedGoods: (items: Omit<WarehouseItem, 'id'>[]) => void;
+  onNavigate: (page: { page: Page, id: string }) => void;
 }
 
 type UnloadItem = {
@@ -395,7 +397,7 @@ const LotAssignmentManager: React.FC<{
 };
 
 
-const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems, onLoadFinishedGoods }) => {
+const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems, onLoadFinishedGoods, onNavigate }) => {
     const { t } = useTranslation();
     const toast = useToast();
     const [currentBatch, setCurrentBatch] = useState<BrewSheet>(batch);
@@ -406,6 +408,27 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
     useEffect(() => {
         setCurrentBatch(batch);
     }, [batch]);
+
+    const recipe = useMemo(() => recipes.find(r => r.id === batch.recipeId), [batch.recipeId, recipes]);
+    const fermenterName = useMemo(() => locations.find(l => l.id === currentBatch.fermenterId)?.name || t('N/A'), [currentBatch.fermenterId, locations, t]);
+
+
+    const { childBatches, parentBatch } = useMemo(() => {
+        const children = allBatches.filter(b => b.linkedBatchId === batch.id);
+        const parent = batch.linkedBatchId ? allBatches.find(b => b.id === batch.linkedBatchId) : null;
+        return { childBatches: children, parentBatch: parent };
+    }, [batch, allBatches]);
+    
+    const totalExpectedLiters = useMemo(() => {
+        if (childBatches.length > 0) {
+            const baseLiters = recipe?.qualityControlSpec.liters.target || 0;
+            return childBatches.reduce((sum, child) => {
+                const childRecipe = recipes.find(r => r.id === child.recipeId);
+                return sum + (childRecipe?.qualityControlSpec.liters.target || 0);
+            }, baseLiters);
+        }
+        return recipe?.qualityControlSpec.liters.target || 0;
+    }, [recipe, childBatches, recipes]);
 
     useEffect(() => {
         const packagingDateStr = currentBatch.packagingLog.packagingDate;
@@ -421,6 +444,14 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
             }
         }
     }, [currentBatch.packagingLog.packagingDate, currentBatch.recipeId, recipes]);
+    
+    useEffect(() => {
+        const newExpectedLiters = totalExpectedLiters * ((recipe?.processParameters.packagingYield || 0) / 100);
+        if (newExpectedLiters > 0 && newExpectedLiters !== currentBatch.packagingLog.summaryExpectedLiters) {
+            handleDeepChange('packagingLog.summaryExpectedLiters', newExpectedLiters);
+        }
+    }, [totalExpectedLiters, recipe, currentBatch.packagingLog.summaryExpectedLiters]);
+
 
     const handleDeepChange = (path: string, value: any) => {
         setCurrentBatch(prev => {
@@ -600,13 +631,17 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
         return value;
     };
 
-    const tabs = [
+    let tabs = [
         { name: 'Mash', icon: <MashTunIcon className="w-5 h-5"/> },
         { name: 'Lauter', icon: <DropletIcon className="w-5 h-5"/> },
         { name: 'Boil', icon: <ThermometerIcon className="w-5 h-5"/> },
         { name: 'Fermentation', icon: <YeastIcon className="w-5 h-5"/> },
         { name: 'BrewStep_Packaging', icon: <BottleIcon className="w-5 h-5"/> }
     ];
+
+    if (parentBatch) {
+        tabs = tabs.slice(0, 3); // Only Mash, Lauter, Boil for child batches
+    }
     
     const packagingSummary = useMemo(() => {
         const summary = { litersInCans: 0, litersInKegs: 0, litersInBottles: 0, totalPackagedLiters: 0 };
@@ -683,14 +718,30 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
                 onConfirm={handleStatusUpdate}
                 t={t}
             />
+            {parentBatch && (
+                <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6" role="alert">
+                    <p className="font-bold">{t('This is a linked batch (turn).')}</p>
+                    <p>{t('Fermentation and Packaging are managed on the main batch.')}
+                        <button onClick={() => onNavigate({ page: Page.Batches, id: parentBatch.id })} className="ml-2 font-semibold underline hover:text-blue-600">
+                            {t('View Main Batch')} ({parentBatch.lot})
+                        </button>
+                    </p>
+                </div>
+            )}
              <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-shrink-0">
                 <div className="flex items-center mb-4 sm:mb-0">
                     <button type="button" onClick={onBack} className="p-2 mr-2 md:mr-4 rounded-full hover:bg-color-border transition-colors">
                         <ArrowLeftIcon className="w-6 h-6"/>
                     </button>
-                    <h1 className="text-xl md:text-3xl font-bold text-color-text">
-                        {t('Brew Sheet')}: {batch.beerName} - {batch.lot}
-                    </h1>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline flex-wrap gap-x-3">
+                            <h1 className="text-xl md:text-3xl font-bold text-color-text truncate">
+                                {currentBatch.beerName} - {currentBatch.lot}
+                            </h1>
+                            <span className="text-lg md:text-xl text-gray-500 font-medium whitespace-nowrap">({fermenterName})</span>
+                        </div>
+                        <p className="text-sm text-gray-500">{t('Brew Sheet')}</p>
+                    </div>
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-4 w-full sm:w-auto">
                     <div className="w-full sm:w-48">
@@ -710,6 +761,24 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, recipes, masterIte
                     </button>
                 </div>
             </div>
+
+            {childBatches.length > 0 && (
+                <Card title={t('Linked Batches')} icon={<LinkIcon className="w-5 h-5"/>} className="mb-6 flex-shrink-0">
+                    <ul className="divide-y divide-color-border/50">
+                        {childBatches.map(child => (
+                            <li key={child.id} className="py-2 flex justify-between items-center">
+                                <div>
+                                    <p className="font-semibold">{t('Lot')}: {child.lot}</p>
+                                    <p className="text-sm text-gray-500">{t('Cook Date')}: {child.cookDate}</p>
+                                </div>
+                                <button onClick={() => onNavigate({ page: Page.Batches, id: child.id })} className="text-sm font-semibold text-color-accent hover:underline">
+                                    {t('View Turn')}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </Card>
+            )}
             
             <div className="mb-4 flex-shrink-0">
                 <nav className="flex space-x-2 md:space-x-4 bg-color-surface/50 rounded-lg p-1 overflow-x-auto">

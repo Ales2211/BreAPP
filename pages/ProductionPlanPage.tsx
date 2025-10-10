@@ -258,9 +258,6 @@ const AnnualForecast: React.FC<Omit<MaterialRequirementsProps, 'plannedBrewSheet
         const required = new Map<string, number>();
 
         Object.entries(recipeBatchCounts).forEach(([recipeId, batchCountValue]) => {
-            // Fix: Explicitly cast batchCountValue to a number to resolve type errors.
-            // The value from recipeBatchCounts is expected to be a number, but TypeScript
-            // sometimes infers `unknown` from Object.entries, causing comparison and arithmetic errors.
             const batchCount = Number(batchCountValue);
             if (batchCount <= 0) return;
             const recipe = recipes.find(r => r.id === recipeId);

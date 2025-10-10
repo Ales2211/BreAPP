@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { BrewSheet, Recipe, Location, MasterItem, Category } from '../types';
 import { useTranslation } from '../hooks/useTranslation';
-import { HopsIcon, MashTunIcon, SnowflakeIcon, ThermometerIcon, ArrowLeftIcon, ArrowRightIcon } from '../components/Icons';
+import { HopsIcon, MashTunIcon, SnowflakeIcon, ThermometerIcon, ArrowLeftIcon, ArrowRightIcon, BottleIcon } from '../components/Icons';
 
 // Helper functions for date manipulation
 const addDays = (date: Date, days: number): Date => {
@@ -196,7 +196,30 @@ const BrewPlannerPage: React.FC<BrewPlannerPageProps> = ({ batches, recipes, loc
                         const startRow = dateToGridRowMap.get(batch.cookDate);
                         if (startRow === undefined) return null;
 
-                        const duration = recipe.fermentationSteps.reduce((sum, step) => sum + step.days, 0) || 1;
+                        let duration: number;
+                        let packagingDayOffset: number;
+                        const recipeFermentationDays = recipe.fermentationSteps.reduce((sum, step) => sum + step.days, 0);
+
+                        if (batch.packagingLog?.packagingDate) {
+                            const packagingDate = new Date(`${batch.packagingLog.packagingDate}T00:00:00`);
+                            const diffTime = packagingDate.getTime() - cookDate.getTime();
+
+                            if (diffTime >= 0) {
+                                const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                                // FIX: The duration of the block should be the number of days leading up to packaging,
+                                // not including the packaging day itself. The original `diffDays + 1` was incorrect.
+                                duration = Math.max(1, diffDays);
+                                packagingDayOffset = diffDays;
+                            } else {
+                                // Fallback if packaging date is somehow before cook date
+                                duration = recipeFermentationDays || 1;
+                                packagingDayOffset = recipeFermentationDays;
+                            }
+                        } else {
+                            duration = recipeFermentationDays || 1;
+                            packagingDayOffset = recipeFermentationDays;
+                        }
+
                         const colorClass = recipeColors.get(batch.recipeId) || 'bg-gray-700/70 border-gray-500';
 
                         // Calculate all tasks for the batch
@@ -212,6 +235,9 @@ const BrewPlannerPage: React.FC<BrewPlannerPageProps> = ({ batches, recipes, loc
                         
                         let cumulativeDays = 0;
                         recipe.fermentationSteps.forEach((step, index) => {
+                            if (batch.packagingLog?.packagingDate && cumulativeDays >= packagingDayOffset) {
+                                return;
+                            }
                             const isCrash = step.description.toLowerCase().includes('crash');
                             const previousStep = index > 0 ? recipe.fermentationSteps[index - 1] : null;
 
@@ -224,6 +250,14 @@ const BrewPlannerPage: React.FC<BrewPlannerPageProps> = ({ batches, recipes, loc
                             }
                             cumulativeDays += step.days;
                         });
+
+                        // Only show packaging task for batches that are not yet finished.
+                        if (!['Packaged', 'Completed'].includes(batch.status)) {
+                            tasks.push({
+                                day: packagingDayOffset,
+                                icon: <span title={t('Ready for Packaging')}><BottleIcon className="w-5 h-5" /></span>
+                            });
+                        }
 
                         const tasksForDayZero = tasks.filter(task => task.day === 0);
                         const otherTasks = tasks.filter(task => task.day !== 0);

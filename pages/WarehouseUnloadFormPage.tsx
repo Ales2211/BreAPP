@@ -4,6 +4,7 @@ import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import { ArrowLeftIcon, PlusCircleIcon, TrashIcon } from '../components/Icons';
 import { useTranslation } from '../hooks/useTranslation';
+import Select from '../components/ui/Select';
 
 interface WarehouseUnloadFormPageProps {
   masterItems: MasterItem[];
@@ -94,11 +95,9 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
     return (
         <form onSubmit={handleSubmit} className="max-w-6xl mx-auto">
             <div className="flex items-center mb-6">
-                {/* Fix: Updated styling to be consistent with the app's theme. */}
                 <button type="button" onClick={onBack} className="p-2 mr-4 rounded-full hover:bg-color-border transition-colors">
                     <ArrowLeftIcon className="w-6 h-6"/>
                 </button>
-                {/* Fix: Updated styling to be consistent with the app's theme. */}
                 <h1 className="text-3xl font-bold text-color-text">
                     {t('New Warehouse Unload')}
                 </h1>
@@ -107,7 +106,6 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
             <div className="space-y-6">
                 <Card title={t('Document Info')}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* FIX: Use a more specific translation key to avoid conflicts */}
                         <Input label={t('Unload_Document_Number')} value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} required />
                         <Input label={t('Unload Date')} type="date" value={unloadDate} onChange={e => setUnloadDate(e.target.value)} required />
                     </div>
@@ -117,24 +115,20 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
                     <form onSubmit={handleAddItem} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                             <div className="md:col-span-2">
-                                <label className="mb-1 block text-sm font-medium text-gray-400">{t('Item Name')}</label>
-                                {/* Fix: Updated styling to be consistent with the app's theme. */}
-                                <select
+                                <Select
+                                    label={t('Item Name')}
                                     value={selectedItemId}
                                     onChange={e => handleItemSelectionChange(e.target.value)}
-                                    className="w-full bg-color-background border border-color-border rounded-md py-2 px-3 text-color-text focus:outline-none focus:ring-2 focus:ring-color-accent transition-colors"
                                 >
                                     {masterItems.map(mi => <option key={mi.id} value={mi.id}>{mi.name}</option>)}
-                                </select>
+                                </Select>
                             </div>
                             <div>
-                                <label className="mb-1 block text-sm font-medium text-gray-400">{t('Lot Number')}</label>
-                                {/* Fix: Updated styling to be consistent with the app's theme. */}
-                                <select
+                                <Select
+                                    label={t('Lot Number')}
                                     value={selectedLot}
                                     onChange={e => setSelectedLot(e.target.value)}
                                     disabled={!selectedItemId || availableLots.length === 0}
-                                    className="w-full bg-color-background border border-color-border rounded-md py-2 px-3 text-color-text focus:outline-none focus:ring-2 focus:ring-color-accent transition-colors"
                                 >
                                     <option value="">{t('Select Lot')}</option>
                                     {availableLots.map(([lot, qty]) => (
@@ -142,13 +136,12 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
                                             {lot} ({Number(qty).toFixed(2)} {selectedMasterItem?.unit})
                                         </option>
                                     ))}
-                                </select>
+                                </Select>
                             </div>
                             <Input 
                                 label={t('Quantity')} 
                                 type="number" 
                                 value={quantity || ''} 
-                                // Fix: Ensure parseFloat defaults to 0 for empty strings to prevent NaN.
                                 onChange={e => setQuantity(parseFloat(e.target.value) || 0)}
                                 max={selectedLotMaxQty}
                                 min="0"
@@ -156,7 +149,6 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
                                 unit={selectedMasterItem?.unit}
                             />
                         </div>
-                        {/* Fix: Updated styling to be consistent with the app's theme. */}
                         <button type="submit" className="flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
                             <PlusCircleIcon className="w-5 h-5" />
                             <span>{t('Add Item to Unload')}</span>
@@ -165,10 +157,8 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
 
                     {items.length > 0 && (
                         <div className="mt-4">
-                             {/* Fix: Updated styling to be consistent with the app's theme. */}
                              <div className="overflow-x-auto rounded-lg border border-color-border/50">
                                 <table className="w-full text-left">
-                                    {/* Fix: Updated styling to be consistent with the app's theme. */}
                                     <thead className="bg-color-background">
                                         <tr>
                                             <th className="py-2 px-3 text-sm font-semibold">{t('Item Name')}</th>
@@ -177,7 +167,6 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
                                             <th className="py-2 px-3 text-sm font-semibold"></th>
                                         </tr>
                                     </thead>
-                                    {/* Fix: Updated styling to be consistent with the app's theme. */}
                                     <tbody className="divide-y divide-color-border/50">
                                         {items.map(item => {
                                             const masterItem = masterItems.find(mi => mi.id === item.masterItemId);
@@ -203,11 +192,9 @@ const WarehouseUnloadFormPage: React.FC<WarehouseUnloadFormPageProps> = ({ maste
             </div>
 
              <div className="mt-8 flex justify-end space-x-4">
-                 {/* Fix: Updated styling to be consistent with the app's theme. */}
                  <button type="button" onClick={onBack} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg shadow-md transition-colors">
                     {t('Cancel')}
                 </button>
-                {/* Fix: Updated styling to be consistent with the app's theme. */}
                 <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
                     {t('Save Unload')}
                 </button>

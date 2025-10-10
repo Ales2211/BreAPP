@@ -405,8 +405,8 @@ const IngredientTraceability: React.FC<{ batches: BrewSheet[], masterItems: Mast
 
     const uniqueLots = useMemo(() => {
         const lotSet = new Set<string>();
-        warehouseItems.forEach(item => lotSet.add(item.lotNumber));
-        // Fix: Updated to iterate through lotAssignments array.
+        warehouseItems.forEach(item => item.lotNumber && lotSet.add(item.lotNumber));
+        // Fix: Updated to iterate through lotAssignments array to correctly find all used lots.
         batches.forEach(batch => {
             batch.mashLog.actual.ingredients.forEach(ing => ing.lotAssignments.forEach(a => a.lotNumber && lotSet.add(a.lotNumber)));
             batch.boilLog.actual.ingredients.forEach(ing => ing.lotAssignments.forEach(a => a.lotNumber && lotSet.add(a.lotNumber)));

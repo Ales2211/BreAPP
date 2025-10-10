@@ -17,7 +17,7 @@ const ReceivePOModal: React.FC<ReceivePOModalProps> = ({ isOpen, onClose }) => {
                 <button
                     type="button"
                     onClick={onClose}
-                    className="bg-brew-light-gray hover:bg-gray-300 text-brew-white font-bold py-2 px-6 rounded-lg"
+                    className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg"
                 >
                     {t('Cancel')}
                 </button>
