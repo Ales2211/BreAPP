@@ -1,48 +1,47 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Recipe, MasterItem, Category, Ingredient, BoilWhirlpoolIngredient, MashStep, FermentationStep, TankIngredient, PackagedItemLink, QualityControlSpecification, QualityControlValueSpec, AdministrationSettings } from '../types';
 import Input from '../components/ui/Input';
 import Card from '../components/ui/Card';
 import Select from '../components/ui/Select';
-import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MaltIcon, HopsIcon, YeastIcon, BookOpenIcon, WrenchIcon, ThermometerIcon, DropletIcon, BottleIcon } from '../components/Icons';
+import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MaltIcon, HopsIcon, YeastIcon, BookOpenIcon, WrenchIcon, ThermometerIcon, DropletIcon, BottleIcon, ChevronDownIcon } from '../components/Icons';
 import { useTranslation } from '../hooks/useTranslation';
 
 const generateId = () => `id_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const getBlankRecipe = (): Omit<Recipe, 'id'> => ({
     name: '', style: '',
+    version: '1.0',
     shelfLifeDays: 90,
     qualityControlSpec: {
-        og: { target: 0 },
-        fg: { target: 0 },
-        abv: { target: 0 },
-        ibu: { target: 0 },
-        liters: { target: 0 },
-        finalPh: { target: 0 },
-        preFermentationPh: { target: 0 },
+        og: { target: undefined },
+        fg: { target: undefined },
+        abv: { target: undefined },
+        ibu: { target: undefined },
+        liters: { target: undefined },
+        finalPh: { target: undefined },
+        preFermentationPh: { target: undefined },
     },
     mashIngredients: [],
     boilWhirlpoolIngredients: [],
     tankIngredients: [],
-    packagingIngredients: [],
     mashSteps: [],
     fermentationSteps: [],
     packagedItems: [],
     processParameters: {
-        mashWaterMainsL: 0, mashWaterMainsMicroSiemens: 0,
-        mashWaterRoL: 0, mashWaterRoMicroSiemens: 0,
-        spargeWaterL: 0, spargeWaterMicroSiemens: 0, spargeWaterPh: 0,
-        maltMilling: 0, expectedMashPh: 0, expectedIodineTime: 0,
-        transferDuration: 0, recirculationDuration: 0, filtrationDuration: 0,
-        firstWortPlato: 0, firstWortPh: 0, lastWortPlato: 0, lastWortPh: 0,
-        preBoilLiters: 0, preBoilPlato: 0, preBoilPh: 0,
-        postBoilLiters: 0, postBoilPlato: 0, postBoilPh: 0,
-        boilDuration: 0, whirlpoolDuration: 0, whirlpoolRestDuration: 0, coolingDuration: 0,
+        mashWaterMainsL: undefined, mashWaterMainsMicroSiemens: undefined,
+        mashWaterRoL: undefined, mashWaterRoMicroSiemens: undefined,
+        spargeWaterL: undefined, spargeWaterMicroSiemens: undefined, spargeWaterPh: undefined,
+        maltMilling: undefined, expectedMashPh: undefined, expectedIodineTime: undefined,
+        transferDuration: undefined, recirculationDuration: undefined, filtrationDuration: undefined,
+        firstWortPlato: undefined, firstWortPh: undefined, lastWortPlato: undefined, lastWortPh: undefined,
+        preBoilLiters: undefined, preBoilPlato: undefined, preBoilPh: undefined,
+        postBoilLiters: undefined, postBoilPlato: undefined, postBoilPh: undefined,
+        boilDuration: undefined, whirlpoolDuration: undefined, whirlpoolRestDuration: undefined, coolingDuration: undefined,
         packagingYield: 80,
     },
     additionalCosts: {
-        other: 0,
+        other: undefined,
     },
     notes: ''
 });
@@ -84,9 +83,21 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
     const hopsCategoryId = useMemo(() => categories.find(c => c.name === 'Hops')?.id, [categories]);
 
     const filteredMasterItems = useMemo(() => {
-        const validCategoryIds = categories.filter(c => validCategoryNames.includes(c.name)).map(c => c.id);
+        // Find parent category IDs from names
+        const parentCategoryIds = new Set(
+            categories.filter(c => validCategoryNames.includes(c.name)).map(c => c.id)
+        );
+
+        // Find child category IDs
+        const childCategoryIds = categories
+            .filter(c => c.parentCategoryId && parentCategoryIds.has(c.parentCategoryId))
+            .map(c => c.id);
+            
+        // Combine all valid IDs
+        const validCategoryIds = new Set([...parentCategoryIds, ...childCategoryIds]);
+
         return masterItems.filter(mi => 
-            validCategoryIds.includes(mi.categoryId) && 
+            validCategoryIds.has(mi.categoryId) && 
             mi.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [searchTerm, masterItems, categories, validCategoryNames]);
@@ -129,7 +140,7 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
     return (
         <div className={`grid ${gridConfig[panelType]} gap-x-2 gap-y-1 items-start bg-color-background/50 p-2 rounded-md`}>
             <div className={`relative ${
-                panelType === 'mash' || panelType === 'packaging' ? 'col-span-12 md:col-span-8' :
+                panelType === 'mash' || panelType === 'packaging' ? 'col-span-12 md:col-span-7' :
                 panelType === 'boil' ? 'col-span-12 md:col-span-3' :
                 'col-span-12 md:col-span-7'
             }`}>
@@ -144,25 +155,28 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
                     }}
                     onFocus={() => { setSearchTerm(masterItem?.name || ''); setIsFocused(true); }}
                     onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-                    className="py-1"
+                    className={`py-1 ${isFocused ? 'rounded-b-none' : 'rounded-md'}`}
+                    autoComplete="off"
                 />
                 {isFocused && (
-                    <ul className="absolute z-10 w-full bg-color-surface border border-color-border rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
-                        {filteredMasterItems.map(mi => (
+                    <ul className="absolute z-10 w-full bg-color-surface border-x border-b border-color-border rounded-b-md max-h-48 overflow-y-auto shadow-lg">
+                        {filteredMasterItems.length > 0 ? filteredMasterItems.map(mi => (
                             <li key={mi.id} onMouseDown={() => handleSelect(mi)} className="px-3 py-2 hover:bg-color-accent hover:text-white cursor-pointer text-sm">
                                 {mi.name}
                             </li>
-                        ))}
+                        )) : (
+                            <li className="px-3 py-2 text-gray-500 text-sm">{t('No ingredients found')}</li>
+                        )}
                     </ul>
                 )}
             </div>
 
-            <div className="col-span-8 md:col-span-2">
+            <div className="col-span-8 md:col-span-4">
                 <Input 
                     label={t('Quantity')}
                     labelClassName="md:hidden"
                     type="number" step="any" min="0"
-                    value={item.quantity}
+                    value={item.quantity ?? ''}
                     onChange={(e) => onUpdate(index, 'quantity', parseFloat(e.target.value) || 0)}
                     unit={masterItem?.unit}
                     className="py-1"
@@ -189,7 +203,7 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
                             label={t('Timing')}
                             labelClassName="md:hidden"
                             type="number" 
-                            value={(item as unknown as BoilWhirlpoolIngredient).timing} 
+                            value={(item as unknown as BoilWhirlpoolIngredient).timing ?? ''} 
                             onChange={e => onUpdate(index, 'timing' as any, parseInt(e.target.value, 10))} 
                             unit="min" 
                             className="py-1" 
@@ -200,7 +214,7 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
                             label={t('Temp.')}
                             labelClassName="md:hidden"
                             type="number" 
-                            value={(item as unknown as BoilWhirlpoolIngredient).temperature || ''} 
+                            value={(item as unknown as BoilWhirlpoolIngredient).temperature ?? ''} 
                             onChange={e => onUpdate(index, 'temperature' as any, parseInt(e.target.value, 10))} 
                             unit="°C" 
                             className="py-1" 
@@ -214,7 +228,7 @@ const IngredientRow = React.memo(function IngredientRow<T extends Ingredient>({
                         label={t('Day')}
                         labelClassName="md:hidden"
                         type="number" 
-                        value={(item as unknown as TankIngredient).day} 
+                        value={(item as unknown as TankIngredient).day ?? ''} 
                         onChange={e => onUpdate(index, 'day' as any, parseInt(e.target.value, 10))} 
                         className="py-1" 
                     />
@@ -262,15 +276,20 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
         setFormData(prev => ({...prev, [name]: parsedValue }));
     };
 
-    const handleProcessParamChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleProcessParamChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        const parsedValue = (value !== '') ? parseFloat(value) : 0;
-        setFormData(prev => ({ ...prev, processParameters: { ...prev.processParameters, [name]: parsedValue } }));
+        const type = (e.target as HTMLInputElement).type;
+        if (type === 'number') {
+            const parsedValue = value === '' ? undefined : parseFloat(value);
+            setFormData(prev => ({ ...prev, processParameters: { ...prev.processParameters, [name]: parsedValue } }));
+        } else {
+            setFormData(prev => ({ ...prev, processParameters: { ...prev.processParameters, [name]: value } }));
+        }
     };
 
     const handleAdditionalCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
-        const parsedValue = (value !== '') ? parseFloat(value) : 0;
+        const parsedValue = (value !== '') ? parseFloat(value) : undefined;
         setFormData(prev => ({ ...prev, additionalCosts: { ...prev.additionalCosts, [name]: parsedValue } }));
     };
 
@@ -297,111 +316,62 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
     
     const { 
         rawMaterialCost, 
-        packagingCost, 
         otherRecipeCosts,
         operationalCostsPerBatch,
         calculatedExciseDuty, 
-        grandTotalCost, 
-        costPerLiter 
     } = useMemo(() => {
-        // Calculate global operational costs per batch
         const { 
             annualBatches, annualManpowerCost, annualGasCost, annualRentCost, annualWaterCost,
             annualDetergentsCost, annualCo2Cost 
         } = administrationSettings;
-        const opCostsPerBatch = annualBatches > 0 
-            ? (
-                (annualManpowerCost || 0) + 
-                (annualGasCost || 0) + 
-                (annualRentCost || 0) + 
-                (annualWaterCost || 0) +
-                (annualDetergentsCost || 0) +
-                (annualCo2Cost || 0)
-              ) / annualBatches 
+        const opCostsPerBatch = (annualBatches || 0) > 0 
+            ? ((annualManpowerCost || 0) + 
+              (annualGasCost || 0) + 
+              (annualRentCost || 0) + 
+              (annualWaterCost || 0) +
+              (annualDetergentsCost || 0) +
+              (annualCo2Cost || 0)
+             ) / annualBatches! 
             : 0;
-            
-        const rmCost = [...formData.mashIngredients, ...formData.boilWhirlpoolIngredients, ...formData.tankIngredients]
-            .reduce((acc, ing) => {
-                const item = masterItems.find(mi => mi.id === ing.masterItemId);
-                return acc + (ing.quantity * (item?.purchaseCost || 0));
-            }, 0);
 
-        const pkgCost = formData.packagingIngredients.reduce((acc, ing) => {
-            const item = masterItems.find(mi => mi.id === ing.masterItemId);
-            return acc + (ing.quantity * (item?.purchaseCost || 0));
-        }, 0);
+        const rmCost = [...formData.mashIngredients, ...formData.boilWhirlpoolIngredients, ...formData.tankIngredients]
+            .reduce((sum, ing) => {
+                const item = masterItems.find(mi => mi.id === ing.masterItemId);
+                return sum + (ing.quantity * (item?.purchaseCost || 0));
+            }, 0);
+        
+        const packagedLiters = (formData.qualityControlSpec.liters.target || 0) * ((formData.processParameters.packagingYield || 0) / 100);
+        const exciseDuty = (formData.qualityControlSpec.og.target || 0) * (packagedLiters / 100) * (administrationSettings.exciseDutyRate || 0);
         
         const otherCosts = Object.values(formData.additionalCosts || {}).reduce((sum: number, cost) => sum + (Number(cost) || 0), 0);
         
-        const packagedLiters = (formData.qualityControlSpec.liters.target || 0) * ((formData.processParameters.packagingYield || 0) / 100);
-        
-        const exciseDuty = (formData.qualityControlSpec.og.target || 0) * (packagedLiters / 100) * (administrationSettings.exciseDutyRate || 0);
-
-        const grandTotal = rmCost + pkgCost + otherCosts + opCostsPerBatch + exciseDuty;
-        
-        const cpl = packagedLiters > 0 ? grandTotal / packagedLiters : 0;
-        
-        return { 
+        return {
             rawMaterialCost: rmCost,
-            packagingCost: pkgCost,
             otherRecipeCosts: otherCosts,
             operationalCostsPerBatch: opCostsPerBatch,
             calculatedExciseDuty: exciseDuty,
-            grandTotalCost: grandTotal,
-            costPerLiter: cpl 
         };
     }, [formData, masterItems, administrationSettings]);
 
-    const tabs = ['General', 'Raw Materials', 'Water', 'Process', 'Finished Product', 'Costs'];
-    
-    const targets = [
-        { key: 'og', labelKey: 'OriginalGravity', unit: '°P', step: 0.1 },
-        { key: 'fg', labelKey: 'FinalGravity', unit: '°P', step: 0.1 },
-        { key: 'abv', labelKey: 'AlcoholByVolume', unit: '%', step: 0.1 },
-        { key: 'ibu', labelKey: 'Bitterness', unit: 'IBU', step: 1 },
-        { key: 'liters', labelKey: 'VolumeInTank', unit: 'L', step: 1 },
-        { key: 'preFermentationPh', labelKey: 'PreFermentationpH', unit: 'pH', step: 0.01 },
-        { key: 'finalPh', labelKey: 'FinalpH', unit: 'pH', step: 0.01 },
-    ];
-    
-    const allIngredientsForCosting = useMemo(() => {
-        return [
-            ...formData.mashIngredients.map(i => ({ ...i, stage: 'Mash' })),
-            ...formData.boilWhirlpoolIngredients.map(i => ({ ...i, stage: 'Boil & Whirlpool' })),
-            ...formData.tankIngredients.map(i => ({ ...i, stage: 'Fermentation' }))
-        ];
-    }, [formData.mashIngredients, formData.boilWhirlpoolIngredients, formData.tankIngredients]);
-    
-    const totalPackagingSplit = useMemo(() => formData.packagedItems.reduce((sum, item) => sum + (item.packagingSplit || 0), 0), [formData.packagedItems]);
-
+    const tabs = ['General', 'Ingredients', 'Process', 'Packaging'];
 
     return (
-        <form onSubmit={handleSave} className="h-full flex flex-col">
-             <div className="flex justify-between items-center mb-6 flex-shrink-0">
-                <div className="flex items-center">
-                    <button type="button" onClick={onBack} className="p-2 mr-4 rounded-full hover:bg-color-border/50 transition-colors">
-                        <ArrowLeftIcon className="w-6 h-6"/>
-                    </button>
-                    <h1 className="text-3xl font-bold text-color-text">
-                        {recipe ? t('Edit Recipe') : t('Create Recipe')}
-                    </h1>
-                </div>
-                <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                    {t('Save')}
+        <form onSubmit={handleSave} className="max-w-6xl mx-auto">
+            <div className="flex items-center mb-6">
+                <button type="button" onClick={onBack} className="p-2 mr-4 rounded-full hover:bg-color-border/50 transition-colors">
+                    <ArrowLeftIcon className="w-6 h-6"/>
                 </button>
+                <h1 className="text-3xl font-bold text-color-text">
+                    {recipe ? t('Edit Recipe') : t('Create Recipe')}
+                </h1>
             </div>
             
-            <div className="border-b border-color-border mb-6 flex-shrink-0">
-                <nav className="flex space-x-4">
+            <div className="mb-4">
+                <nav className="flex space-x-4 bg-color-surface/50 rounded-lg p-1">
                     {tabs.map(tab => (
-                        <button
-                            key={tab}
-                            type="button"
-                            onClick={() => setActiveTab(tab)}
-                            className={`py-3 px-1 text-sm font-semibold transition-colors ${
-                                activeTab === tab
-                                ? 'border-b-2 border-color-accent text-color-accent'
-                                : 'text-gray-500 hover:text-color-text'
+                        <button key={tab} type="button" onClick={() => setActiveTab(tab)}
+                            className={`flex-1 py-2 px-4 rounded-md font-semibold text-sm transition-colors ${
+                                activeTab === tab ? 'bg-color-accent text-white shadow-md' : 'text-gray-600 hover:bg-color-border/50'
                             }`}
                         >
                             {t(tab)}
@@ -409,275 +379,454 @@ const RecipeFormPage: React.FC<RecipeFormPageProps> = ({ recipe, masterItems, ca
                     ))}
                 </nav>
             </div>
-
-            <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+            
+            <div className="space-y-6">
                 {activeTab === 'General' && (
-                    <div className="space-y-6">
-                         <Card title={t('General Information')} icon={<BookOpenIcon className="w-5 h-5"/>}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <Input containerClassName="md:col-span-2" label={t('Recipe Name')} name="name" value={formData.name} onChange={handleChange} required />
-                                <Input label={t('Style')} name="style" value={formData.style} onChange={handleChange} />
-                                <Input label={t('Shelf Life (days)')} name="shelfLifeDays" type="number" value={formData.shelfLifeDays || ''} onChange={handleChange} />
+                    <Card title={t('Recipe Details')} icon={<BookOpenIcon className="w-5 h-5"/>}>
+                        <div className="space-y-6">
+                            {/* Section 1: Basic Info */}
+                            <div>
+                                <h4 className="text-lg font-semibold text-color-secondary border-b border-color-border/50 pb-2 mb-4">{t('Basic Info')}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <Input containerClassName="md:col-span-3" label={t('Recipe Name')} name="name" value={formData.name} onChange={handleChange} required />
+                                    <Input label={t('Style')} name="style" value={formData.style} onChange={handleChange} required />
+                                    <Input label={t('Version')} name="version" value={formData.version || ''} onChange={handleChange} />
+                                    <Input label={t('Shelf Life (days)')} name="shelfLifeDays" type="number" value={formData.shelfLifeDays ?? ''} onChange={handleChange} />
+                                </div>
                             </div>
-                        </Card>
-                        <Card title={t('Targets')} icon={<ThermometerIcon className="w-5 h-5"/>}>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="border-b-2 border-color-border/50">
-                                        <tr>
-                                            <th className="p-2 w-1/3">{t('Parameter')}</th>
-                                            <th className="p-2 text-center">{t('Target')}</th>
-                                            <th className="p-2 text-center">{t('Min')}</th>
-                                            <th className="p-2 text-center">{t('Max')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-color-border/20">
-                                        {targets.map(({ key, labelKey, unit, step }) => (
-                                            <tr key={key}>
-                                                <td className="p-2 font-semibold text-color-secondary">{t(labelKey)} ({unit})</td>
-                                                <td className="p-2">
-                                                    <Input
-                                                        type="number"
-                                                        step={step}
-                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.target || ''}
-                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'target', e.target.value)}
-                                                        className="text-center font-mono w-full"
-                                                        aria-label={`${t('Target')} ${t(labelKey)}`}
-                                                    />
-                                                </td>
-                                                <td className="p-2">
-                                                     <Input
-                                                        type="number"
-                                                        step={step}
-                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.min ?? ''}
-                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'min', e.target.value)}
-                                                        placeholder="-"
-                                                        className="text-center font-mono w-full"
-                                                        aria-label={`${t('Min')} ${t(labelKey)}`}
-                                                    />
-                                                </td>
-                                                <td className="p-2">
-                                                     <Input
-                                                        type="number"
-                                                        step={step}
-                                                        value={formData.qualityControlSpec?.[key as keyof QualityControlSpecification]?.max ?? ''}
-                                                        onChange={e => handleQcChange(key as keyof QualityControlSpecification, 'max', e.target.value)}
-                                                        placeholder="-"
-                                                        className="text-center font-mono w-full"
-                                                        aria-label={`${t('Max')} ${t(labelKey)}`}
-                                                    />
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </Card>
-                    </div>
-                )}
 
-                {activeTab === 'Raw Materials' && (
-                    <div className="space-y-6">
-                        <Card title={t('Mash Ingredients')} icon={<MaltIcon className="w-5 h-5" />}>
-                           {formData.mashIngredients.length > 0 && <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-2"><div className="col-span-8">{t('Ingredient')}</div><div className="col-span-3">{t('Quantity')}</div><div className="col-span-1 text-right">{t('Actions')}</div></div>}
-                            <div className="space-y-2">
-                                {formData.mashIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('mashIngredients', formData.mashIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('mashIngredients', formData.mashIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Malt', 'Adjunct', 'Sugar', 'Category_Other']} panelType="mash" totalWeightForPercentage={totalGristWeight} categoryForPercentage="Malt" />)}
+                            {/* Section 2: Quality Control Specs */}
+                            <div>
+                                <h4 className="text-lg font-semibold text-color-secondary border-b border-color-border/50 pb-2 mb-4">{t('Key Parameters')}</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <QcInput label="OG (°P)" field="og" value={formData.qualityControlSpec.og} onChange={handleQcChange} />
+                                    <QcInput label="FG (°P)" field="fg" value={formData.qualityControlSpec.fg} onChange={handleQcChange} />
+                                    <QcInput label="ABV (%)" field="abv" value={formData.qualityControlSpec.abv} onChange={handleQcChange} />
+                                    <QcInput label="IBU" field="ibu" value={formData.qualityControlSpec.ibu} onChange={handleQcChange} />
+                                    <QcInput label="Final Volume (L)" field="liters" value={formData.qualityControlSpec.liters} onChange={handleQcChange} />
+                                    <QcInput label="Final pH" field="finalPh" value={formData.qualityControlSpec.finalPh} onChange={handleQcChange} />
+                                    <QcInput label="Pre-Ferm pH" field="preFermentationPh" value={formData.qualityControlSpec.preFermentationPh} onChange={handleQcChange} />
+                                </div>
                             </div>
-                            <button type="button" onClick={() => handleUpdateList('mashIngredients', [...formData.mashIngredients, { id: generateId(), masterItemId: '', quantity: 0 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Mash Ingredient')}</span>
-                            </button>
-                        </Card>
-                         <Card title={t('Boil & Whirlpool')} icon={<HopsIcon className="w-5 h-5" />}>
-                            {formData.boilWhirlpoolIngredients.length > 0 && <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-2"><div className="col-span-3">{t('Ingredient')}</div><div className="col-span-2">{t('Quantity')}</div><div className="col-span-2">{t('Phase')}</div><div className="col-span-2">{t('Timing')}</div><div className="col-span-2">{t('Temp.')}</div><div className="col-span-1 text-right">{t('Actions')}</div></div>}
-                             <div className="space-y-2">
-                                {formData.boilWhirlpoolIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('boilWhirlpoolIngredients', formData.boilWhirlpoolIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('boilWhirlpoolIngredients', formData.boilWhirlpoolIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Hops', 'Spices', 'Sugar', 'Category_Other']} panelType="boil" litersForGl={formData.qualityControlSpec.liters.target} />)}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('boilWhirlpoolIngredients', [...formData.boilWhirlpoolIngredients, { id: generateId(), masterItemId: '', quantity: 0, type: 'Boil', timing: 60 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Boil/Whirlpool Ingredient')}</span>
-                            </button>
-                        </Card>
-                         <Card title={t('Tank Ingredients')} icon={<YeastIcon className="w-5 h-5" />}>
-                             {formData.tankIngredients.length > 0 && <div className="hidden md:grid grid-cols-12 gap-2 text-xs font-semibold text-gray-500 mb-2 px-2"><div className="col-span-7">{t('Ingredient')}</div><div className="col-span-3">{t('Quantity')}</div><div className="col-span-1">{t('Day')}</div><div className="col-span-1 text-right">{t('Actions')}</div></div>}
-                             <div className="space-y-2">
-                                {formData.tankIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('tankIngredients', formData.tankIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('tankIngredients', formData.tankIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Yeast', 'Hops', 'Spices', 'Adjunct', 'Category_Other']} panelType="tank" litersForGl={formData.qualityControlSpec.liters.target} />)}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('tankIngredients', [...formData.tankIngredients, { id: generateId(), masterItemId: '', quantity: 0, day: 0 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Tank Ingredient')}</span>
-                            </button>
-                        </Card>
-                    </div>
-                )}
-                
-                {activeTab === 'Water' && (
-                     <Card title={t('Water Profile')} icon={<DropletIcon className="w-5 h-5"/>}>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Input label={t('Mash Water (Mains, L)')} name="mashWaterMainsL" type="number" step="any" value={formData.processParameters.mashWaterMainsL} onChange={handleProcessParamChange} />
-                            <Input label={t('Mash Water (Mains, µS/cm)')} name="mashWaterMainsMicroSiemens" type="number" step="any" value={formData.processParameters.mashWaterMainsMicroSiemens} onChange={handleProcessParamChange} />
-                            <Input label={t('Mash Water (RO, L)')} name="mashWaterRoL" type="number" step="any" value={formData.processParameters.mashWaterRoL} onChange={handleProcessParamChange} />
-                            <Input label={t('Mash Water (RO, µS/cm)')} name="mashWaterRoMicroSiemens" type="number" step="any" value={formData.processParameters.mashWaterRoMicroSiemens} onChange={handleProcessParamChange} />
-                            <Input label={t('Sparge Water (L)')} name="spargeWaterL" type="number" step="any" value={formData.processParameters.spargeWaterL} onChange={handleProcessParamChange} />
-                            <Input label={t('Sparge Water (µS/cm)')} name="spargeWaterMicroSiemens" type="number" step="any" value={formData.processParameters.spargeWaterMicroSiemens} onChange={handleProcessParamChange} />
-                            <Input label={t('Sparge Water pH')} name="spargeWaterPh" type="number" step="0.01" value={formData.processParameters.spargeWaterPh} onChange={handleProcessParamChange} />
                         </div>
                     </Card>
                 )}
-
-                {activeTab === 'Process' && (
-                    <div className="space-y-6">
-                        <Card title={t('Mash Steps')} icon={<MaltIcon className="w-5 h-5"/>}>
-                            <div className="space-y-2">
-                                {formData.mashSteps.map((step, index) => (
-                                    <div key={step.id} className="grid grid-cols-12 gap-2 items-end bg-color-background/50 p-2 rounded-md">
-                                        <div className="col-span-4"><Input label={t('Temperature (°C)')} type="number" value={step.temperature} onChange={(e) => handleUpdateList('mashSteps', formData.mashSteps.map((s, i) => i === index ? { ...s, temperature: parseFloat(e.target.value) || 0 } : s))} /></div>
-                                        <div className="col-span-4"><Input label={t('Duration (min)')} type="number" value={step.duration} onChange={(e) => handleUpdateList('mashSteps', formData.mashSteps.map((s, i) => i === index ? { ...s, duration: parseInt(e.target.value, 10) || 0 } : s))} /></div>
-                                        <div className="col-span-3"><Select label={t('Type')} value={step.type} onChange={(e) => handleUpdateList('mashSteps', formData.mashSteps.map((s, i) => i === index ? { ...s, type: e.target.value as MashStep['type'] } : s))}><option value="Infusion">{t('Infusion')}</option><option value="Decoction">{t('Decoction')}</option><option value="Temperature">{t('Temperature')}</option></Select></div>
-                                        <div className="col-span-1 flex items-center justify-end"><button type="button" onClick={() => handleUpdateList('mashSteps', formData.mashSteps.filter(s => s.id !== step.id))} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100"><TrashIcon className="w-5 h-5"/></button></div>
-                                    </div>
-                                ))}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('mashSteps', [...formData.mashSteps, { id: generateId(), temperature: 65, duration: 60, type: 'Infusion' }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent"><PlusCircleIcon className="w-5 h-5"/><span>{t('Add Mash Step')}</span></button>
-                        </Card>
-                        <Card title={t('Fermentation Steps')} icon={<YeastIcon className="w-5 h-5"/>}>
-                            <div className="space-y-2">
-                                {formData.fermentationSteps.map((step, index) => (
-                                    <div key={step.id} className="grid grid-cols-12 gap-2 items-end bg-color-background/50 p-2 rounded-md">
-                                        <div className="col-span-12 md:col-span-5"><Input label={t('Step Description')} value={step.description} onChange={(e) => handleUpdateList('fermentationSteps', formData.fermentationSteps.map((s, i) => i === index ? { ...s, description: e.target.value } : s))} /></div>
-                                        <div className="col-span-4 md:col-span-2"><Input label={t('Temperature (°C)')} type="number" value={step.temperature} onChange={(e) => handleUpdateList('fermentationSteps', formData.fermentationSteps.map((s, i) => i === index ? { ...s, temperature: parseFloat(e.target.value) || 0 } : s))} /></div>
-                                        <div className="col-span-4 md:col-span-2"><Input label={t('Pressure (Bar)')} type="number" step="0.1" value={step.pressure} onChange={(e) => handleUpdateList('fermentationSteps', formData.fermentationSteps.map((s, i) => i === index ? { ...s, pressure: parseFloat(e.target.value) || 0 } : s))} /></div>
-                                        <div className="col-span-4 md:col-span-2"><Input label={t('Days')} type="number" value={step.days} onChange={(e) => handleUpdateList('fermentationSteps', formData.fermentationSteps.map((s, i) => i === index ? { ...s, days: parseInt(e.target.value, 10) || 0 } : s))} /></div>
-                                        <div className="col-span-12 md:col-span-1 flex items-center justify-end"><button type="button" onClick={() => handleUpdateList('fermentationSteps', formData.fermentationSteps.filter(s => s.id !== step.id))} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100"><TrashIcon className="w-5 h-5"/></button></div>
-                                    </div>
-                                ))}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('fermentationSteps', [...formData.fermentationSteps, { id: generateId(), description: '', temperature: 18, pressure: 0, days: 7 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent"><PlusCircleIcon className="w-5 h-5"/><span>{t('Add Fermentation Step')}</span></button>
-                        </Card>
-                         <Card title={t('Process Parameters')} icon={<WrenchIcon className="w-5 h-5"/>}>
-                            <div className="space-y-6">
-                                <div><h4 className="text-md font-semibold text-color-secondary mb-2 border-b border-color-border/30 pb-1">{t('Grist & Mash')}</h4><div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><Input label={t('Malt Milling (%)')} name="maltMilling" type="number" step="any" value={formData.processParameters.maltMilling} onChange={handleProcessParamChange} /><Input label={t('Expected Mash pH')} name="expectedMashPh" type="number" step="0.01" value={formData.processParameters.expectedMashPh} onChange={handleProcessParamChange} /><Input label={t('Expected Iodine Time (min)')} name="expectedIodineTime" type="number" value={formData.processParameters.expectedIodineTime} onChange={handleProcessParamChange} /></div></div>
-                                <div><h4 className="text-md font-semibold text-color-secondary mb-2 border-b border-color-border/30 pb-1">{t('Lauter')}</h4><div className="grid grid-cols-2 sm:grid-cols-4 gap-4"><Input label={t('Transfer Duration (min)')} name="transferDuration" type="number" value={formData.processParameters.transferDuration} onChange={handleProcessParamChange} /><Input label={t('Recirculation Duration (min)')} name="recirculationDuration" type="number" value={formData.processParameters.recirculationDuration} onChange={handleProcessParamChange} /><Input label={t('Filtration Duration (min)')} name="filtrationDuration" type="number" value={formData.processParameters.filtrationDuration} onChange={handleProcessParamChange} /><Input label={t('First Wort (°P)')} name="firstWortPlato" type="number" step="0.1" value={formData.processParameters.firstWortPlato} onChange={handleProcessParamChange} /><Input label={t('First Wort pH')} name="firstWortPh" type="number" step="0.01" value={formData.processParameters.firstWortPh} onChange={handleProcessParamChange} /><Input label={t('Last Wort (°P)')} name="lastWortPlato" type="number" step="0.1" value={formData.processParameters.lastWortPlato} onChange={handleProcessParamChange} /><Input label={t('Last Wort pH')} name="lastWortPh" type="number" step="0.01" value={formData.processParameters.lastWortPh} onChange={handleProcessParamChange} /></div></div>
-                                <div><h4 className="text-md font-semibold text-color-secondary mb-2 border-b border-color-border/30 pb-1">{t('Boil & Cooling')}</h4><div className="grid grid-cols-2 sm:grid-cols-3 gap-4"><Input label={t('Pre-Boil (L)')} name="preBoilLiters" type="number" step="any" value={formData.processParameters.preBoilLiters} onChange={handleProcessParamChange} /><Input label={t('Pre-Boil (°P)')} name="preBoilPlato" type="number" step="0.1" value={formData.processParameters.preBoilPlato} onChange={handleProcessParamChange} /><Input label={t('Pre-boil pH')} name="preBoilPh" type="number" step="0.01" value={formData.processParameters.preBoilPh} onChange={handleProcessParamChange} /><Input label={t('Post-Boil (L)')} name="postBoilLiters" type="number" step="any" value={formData.processParameters.postBoilLiters} onChange={handleProcessParamChange} /><Input label={t('Post-Boil (°P)')} name="postBoilPlato" type="number" step="0.1" value={formData.processParameters.postBoilPlato} onChange={handleProcessParamChange} /><Input label={t('Post-Boil pH')} name="postBoilPh" type="number" step="0.01" value={formData.processParameters.postBoilPh} onChange={handleProcessParamChange} /><Input label="Boil Duration (min)" name="boilDuration" type="number" value={formData.processParameters.boilDuration} onChange={handleProcessParamChange} /><Input label="Whirlpool Duration (min)" name="whirlpoolDuration" type="number" value={formData.processParameters.whirlpoolDuration} onChange={handleProcessParamChange} /><Input label="Whirlpool Rest (min)" name="whirlpoolRestDuration" type="number" value={formData.processParameters.whirlpoolRestDuration} onChange={handleProcessParamChange} /><Input label="Cooling Duration (min)" name="coolingDuration" type="number" value={formData.processParameters.coolingDuration} onChange={handleProcessParamChange} /></div></div>
-                            </div>
-                        </Card>
-                    </div>
-                )}
-
-                {activeTab === 'Finished Product' && (
-                    <Card title={t('Packaged Items')} icon={<BottleIcon className="w-5 h-5"/>}>
-                        <p className="text-sm text-gray-500 mb-2">{t('Define the final products for this recipe, including markup and packaging split.')}</p>
-                        {totalPackagingSplit !== 100 && <p className="text-sm text-yellow-600 bg-yellow-100 p-2 rounded-md mb-4">{t('Total Packaging Split must be 100%')}. Current: {totalPackagingSplit}%</p>}
-                        <div className="space-y-3">
-                            {formData.packagedItems.map((item, index) => (
-                                <div key={item.id} className="grid grid-cols-12 gap-2 items-end bg-color-background p-2 rounded-md">
-                                    <div className="col-span-12 sm:col-span-8">
-                                        <Select label={t('Item')} value={item.masterItemId} onChange={(e) => handleUpdateList('packagedItems', formData.packagedItems.map((p, i) => i === index ? { ...p, masterItemId: e.target.value } : p))} >
-                                            <option value="">{t('Select Item...')}</option>
-                                            {finishedGoodsMasterItems.map(mi => <option key={mi.id} value={mi.id}>{mi.name}</option>)}
-                                        </Select>
-                                    </div>
-                                    <div className="col-span-8 sm:col-span-3">
-                                        <Input label={t('Packaging Split')} type="number" value={item.packagingSplit || ''} onChange={e => handleUpdateList('packagedItems', formData.packagedItems.map((p, i) => i === index ? { ...p, packagingSplit: parseFloat(e.target.value) || 0 } : p))} unit="%" />
-                                    </div>
-                                    <div className="col-span-4 sm:col-span-1 flex justify-end">
-                                        <button type="button" onClick={() => handleUpdateList('packagedItems', formData.packagedItems.filter(p => p.id !== item.id))} className="p-2 text-red-500 hover:text-red-400">
-                                            <TrashIcon className="w-5 h-5" />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <button type="button" onClick={() => handleUpdateList('packagedItems', [...formData.packagedItems, { id: generateId(), masterItemId: '' }])} className="mt-4 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
-                            <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Packaged Item')}</span>
-                        </button>
-                    </Card>
-                )}
                 
-                {activeTab === 'Costs' && (
-                     <div className="space-y-6">
-                        <Card title={t('Raw Material Costs')}>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead className="border-b-2 border-color-border/50"><tr><th className="p-2">{t('Ingredient Name')}</th><th className="p-2">{t('Stage')}</th><th className="p-2 text-right">{t('Quantity')}</th><th className="p-2 text-right">{t('Cost per Unit')}</th><th className="p-2 text-right">{t('Total Cost')}</th></tr></thead>
-                                    <tbody className="divide-y divide-color-border/20">
-                                        {allIngredientsForCosting.map(ing => { const item = masterItems.find(mi => mi.id === ing.masterItemId); const cost = item?.purchaseCost || 0; const total = ing.quantity * cost; return (<tr key={ing.id}><td className="p-2 font-semibold">{item?.name || '...'}</td><td className="p-2 text-gray-500">{t(ing.stage)}</td><td className="p-2 text-right font-mono">{ing.quantity.toFixed(2)} {item?.unit}</td><td className="p-2 text-right font-mono">{cost.toFixed(2)} €</td><td className="p-2 text-right font-mono font-bold">{total.toFixed(2)} €</td></tr>)})}
-                                    </tbody>
-                                    <tfoot><tr className="border-t-2 border-color-border/50"><td colSpan={4} className="p-2 text-right font-bold text-color-secondary">{t('Subtotal Raw Materials')}</td><td className="p-2 text-right font-mono font-bold text-lg text-color-secondary">{rawMaterialCost.toFixed(2)} €</td></tr></tfoot>
-                                </table>
-                            </div>
-                        </Card>
-
-                        <Card title={t('Packaging Materials')} icon={<BottleIcon className="w-5 h-5"/>}>
-                           <div className="space-y-2">
-                                {formData.packagingIngredients.map((item, index) => <IngredientRow key={item.id} item={item} index={index} onUpdate={(idx, field, value) => handleUpdateList('packagingIngredients', formData.packagingIngredients.map((ing, i) => i === idx ? { ...ing, [field]: value } : ing))} onRemove={id => handleUpdateList('packagingIngredients', formData.packagingIngredients.filter(ing => ing.id !== id))} masterItems={masterItems} categories={categories} t={t} validCategoryNames={['Category_Packaging']} panelType="packaging" />)}
-                            </div>
-                            <button type="button" onClick={() => handleUpdateList('packagingIngredients', [...formData.packagingIngredients, { id: generateId(), masterItemId: '', quantity: 0 }])} className="mt-3 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Packaging Material')}</span>
-                            </button>
-                        </Card>
-
-                        <Card title={t('Operational & Fixed Costs')}>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <Input label={t('Packaging Yield')} name="packagingYield" type="number" step="any" value={formData.processParameters.packagingYield || ''} onChange={handleProcessParamChange} unit="%" />
-                                <Input label={t('Other Costs')} name="other" type="number" step="any" value={formData.additionalCosts?.other || ''} onChange={handleAdditionalCostChange} unit="€" />
-                            </div>
-                        </Card>
-
-                         <Card title={t('Cost Summary')}>
-                            <div className="space-y-3 p-2">
-                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Subtotal Raw Materials')}</span><span className="font-mono text-lg">{rawMaterialCost.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Subtotal Packaging')}</span><span className="font-mono text-lg">{packagingCost.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Operational Costs per Batch')}</span><span className="font-mono text-lg">{operationalCostsPerBatch.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Other Costs')}</span><span className="font-mono text-lg">{otherRecipeCosts.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-md"><span className="font-semibold text-gray-500">{t('Calculated Excise Duty')}</span><span className="font-mono text-lg">{calculatedExciseDuty.toFixed(2)} €</span></div>
-                                <hr className="my-2 border-color-border/50"/>
-                                <div className="flex justify-between items-center text-xl"><span className="font-bold text-color-secondary">{t('Grand Total Batch Cost')}</span><span className="font-bold font-mono text-color-accent">{grandTotalCost.toFixed(2)} €</span></div>
-                                <div className="flex justify-between items-center text-xl"><span className="font-bold text-color-secondary">{t('Cost per Liter')}</span><span className="font-bold font-mono text-color-accent">{costPerLiter.toFixed(2)} €</span></div>
-                            </div>
-                        </Card>
-                        
-                        <Card title={t('Finished Product Costing')}>
-                           <div className="space-y-4">
-                            {formData.packagedItems.map(packagedItem => {
-                                const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
-                                if (!masterItem) return null;
-                                const split = (packagedItem.packagingSplit || 0) / 100;
-                                const totalCostForFormat = grandTotalCost * split;
-                                const packagedLiters = (formData.qualityControlSpec.liters.target || 0) * ((formData.processParameters.packagingYield || 0) / 100);
-                                const litersInFormat = packagedLiters * split;
-                                const costPerLiterFormat = litersInFormat > 0 ? totalCostForFormat / litersInFormat : 0;
-                                const costPerUnit = costPerLiterFormat * (masterItem.containerVolumeL || 0);
-
-                                return (
-                                <div key={packagedItem.id} className="bg-color-background/50 p-3 rounded-lg">
-                                    <h4 className="font-bold text-color-secondary mb-2">{masterItem.name}</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                            <h5 className="font-semibold mb-1">{t('Cost Breakdown for')} {masterItem.name}</h5>
-                                            <div className="space-y-1">
-                                                <div className="flex justify-between"><span>{t('Raw Materials')}</span><span className="font-mono">{(rawMaterialCost * split).toFixed(2)}€</span></div>
-                                                <div className="flex justify-between"><span>{t('Packaging')}</span><span className="font-mono">{(packagingCost * split).toFixed(2)}€</span></div>
-                                                <div className="flex justify-between"><span>{t('Operational')}</span><span className="font-mono">{(operationalCostsPerBatch * split).toFixed(2)}€</span></div>
-                                                <div className="flex justify-between"><span>{t('Calculated Excise Duty')}</span><span className="font-mono">{(calculatedExciseDuty * split).toFixed(2)}€</span></div>
-                                                <div className="flex justify-between font-bold border-t border-color-border/50 pt-1 mt-1"><span>{t('Total')}</span><span className="font-mono">{(totalCostForFormat).toFixed(2)}€</span></div>
-                                            </div>
-                                        </div>
-                                         <div>
-                                            <h5 className="font-semibold mb-1">{t('Cost per Unit')}</h5>
-                                             <div className="space-y-1">
-                                                <div className="flex justify-between"><span>{t('Per Liter')}</span><span className="font-mono">{costPerLiterFormat.toFixed(2)} €</span></div>
-                                                <div className="flex justify-between font-bold text-color-accent border-t border-color-border/50 pt-1 mt-1"><span>{t('Per Unit')} ({masterItem.containerVolumeL}L)</span><span className="font-mono">{costPerUnit.toFixed(2)} €</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                );
-                            })}
+                 {activeTab === 'Ingredients' && (
+                    <div className="space-y-6">
+                        <IngredientSection 
+                            title="Mash Ingredients" 
+                            icon={<MaltIcon className="w-5 h-5"/>} 
+                            items={formData.mashIngredients} 
+                            onUpdate={(newList) => handleUpdateList('mashIngredients', newList)}
+                            panelType="mash"
+                            masterItems={masterItems} categories={categories} t={t}
+                            validCategoryNames={['Malt', 'Sugar', 'Adjunct']}
+                            totalWeightForPercentage={totalGristWeight}
+                            categoryForPercentage="Malt"
+                        />
+                        <IngredientSection 
+                            title="Boil & Whirlpool" 
+                            icon={<HopsIcon className="w-5 h-5"/>} 
+                            items={formData.boilWhirlpoolIngredients} 
+                            onUpdate={(newList) => handleUpdateList('boilWhirlpoolIngredients', newList)}
+                            panelType="boil"
+                            masterItems={masterItems} categories={categories} t={t}
+                            validCategoryNames={['Hops', 'Spices', 'Sugar', 'Adjunct', 'Other']}
+                            litersForGl={formData.processParameters.postBoilLiters}
+                        />
+                        <IngredientSection 
+                            title="Tank Ingredients" 
+                            icon={<YeastIcon className="w-5 h-5"/>} 
+                            items={formData.tankIngredients} 
+                            onUpdate={(newList) => handleUpdateList('tankIngredients', newList)}
+                            panelType="tank"
+                            masterItems={masterItems} categories={categories} t={t}
+                            validCategoryNames={['Hops', 'Yeast', 'Spices', 'Sugar', 'Adjunct', 'Other']}
+                            litersForGl={formData.qualityControlSpec.liters.target}
+                        />
+                    </div>
+                 )}
+                 
+                 {activeTab === 'Process' && (
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <Card title={t('Mash')} icon={<ThermometerIcon className="w-5 h-5"/>}>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               <Input label={t('Mash Water (Mains, L)')} name="mashWaterMainsL" type="number" step="any" value={formData.processParameters.mashWaterMainsL ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Mash Water (Mains, µS/cm)')} name="mashWaterMainsMicroSiemens" type="number" step="any" value={formData.processParameters.mashWaterMainsMicroSiemens ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Mash Water (RO, L)')} name="mashWaterRoL" type="number" step="any" value={formData.processParameters.mashWaterRoL ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Mash Water (RO, µS/cm)')} name="mashWaterRoMicroSiemens" type="number" step="any" value={formData.processParameters.mashWaterRoMicroSiemens ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Malt Milling (%)')} name="maltMilling" type="number" step="any" value={formData.processParameters.maltMilling ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Expected Mash pH')} name="expectedMashPh" type="number" step="0.01" value={formData.processParameters.expectedMashPh ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Expected Iodine Time (min)')} name="expectedIodineTime" type="number" value={formData.processParameters.expectedIodineTime ?? ''} onChange={handleProcessParamChange} />
                            </div>
+                           <h4 className="font-semibold text-color-secondary mt-6 mb-2">{t('Mash Steps')}</h4>
+                           <StepManager type="mash" steps={formData.mashSteps} onUpdate={(newSteps) => handleUpdateList('mashSteps', newSteps)} t={t} />
+                        </Card>
+                         <Card title={t('Lauter')} icon={<DropletIcon className="w-5 h-5"/>}>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               <Input label={t('Transfer Duration (min)')} name="transferDuration" type="number" value={formData.processParameters.transferDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Recirculation Duration (min)')} name="recirculationDuration" type="number" value={formData.processParameters.recirculationDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Filtration Duration (min)')} name="filtrationDuration" type="number" value={formData.processParameters.filtrationDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('First Wort (°P)')} name="firstWortPlato" type="number" step="0.1" value={formData.processParameters.firstWortPlato ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('First Wort pH')} name="firstWortPh" type="number" step="0.01" value={formData.processParameters.firstWortPh ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Last Wort (°P)')} name="lastWortPlato" type="number" step="0.1" value={formData.processParameters.lastWortPlato ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Last Wort pH')} name="lastWortPh" type="number" step="0.01" value={formData.processParameters.lastWortPh ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Sparge Water (L)')} name="spargeWaterL" type="number" step="any" value={formData.processParameters.spargeWaterL ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Sparge Water (µS/cm)')} name="spargeWaterMicroSiemens" type="number" step="any" value={formData.processParameters.spargeWaterMicroSiemens ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Sparge Water pH')} name="spargeWaterPh" type="number" step="0.01" value={formData.processParameters.spargeWaterPh ?? ''} onChange={handleProcessParamChange} />
+                           </div>
+                        </Card>
+                        <Card title={t('Boil & Cooling')} icon={<ThermometerIcon className="w-5 h-5"/>}>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                               <Input label={t('Pre-Boil Liters')} name="preBoilLiters" type="number" step="any" value={formData.processParameters.preBoilLiters ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Pre-Boil Plato (°P)')} name="preBoilPlato" type="number" step="0.1" value={formData.processParameters.preBoilPlato ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Pre-boil pH')} name="preBoilPh" type="number" step="0.01" value={formData.processParameters.preBoilPh ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Post-Boil Liters')} name="postBoilLiters" type="number" step="any" value={formData.processParameters.postBoilLiters ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Post-Boil Plato (°P)')} name="postBoilPlato" type="number" step="0.1" value={formData.processParameters.postBoilPlato ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Post-Boil pH')} name="postBoilPh" type="number" step="0.01" value={formData.processParameters.postBoilPh ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Boil Duration (min)')} name="boilDuration" type="number" value={formData.processParameters.boilDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Whirlpool Duration (min)')} name="whirlpoolDuration" type="number" value={formData.processParameters.whirlpoolDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Whirlpool Rest (min)')} name="whirlpoolRestDuration" type="number" value={formData.processParameters.whirlpoolRestDuration ?? ''} onChange={handleProcessParamChange} />
+                               <Input label={t('Cooling Duration (min)')} name="coolingDuration" type="number" value={formData.processParameters.coolingDuration ?? ''} onChange={handleProcessParamChange} />
+                               <div className="md:col-span-2 border-t border-color-border/30 pt-4 mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Input 
+                                        label={t('Boil Water Addition')} 
+                                        name="boilWaterAdditionL" 
+                                        type="number" 
+                                        step="any" 
+                                        value={formData.processParameters.boilWaterAdditionL ?? ''} 
+                                        onChange={handleProcessParamChange}
+                                        unit="L"
+                                    />
+                                    <Input 
+                                        label={t('Notes')} 
+                                        name="boilWaterAdditionNotes" 
+                                        value={formData.processParameters.boilWaterAdditionNotes || ''} 
+                                        onChange={handleProcessParamChange}
+                                    />
+                                </div>
+                           </div>
+                        </Card>
+                        <Card title={t('Fermentation')} icon={<YeastIcon className="w-5 h-5"/>}>
+                           <h4 className="font-semibold text-color-secondary mb-2">{t('Fermentation Steps')}</h4>
+                           <StepManager type="ferm" steps={formData.fermentationSteps} onUpdate={(newSteps) => handleUpdateList('fermentationSteps', newSteps)} t={t} />
+                        </Card>
+                     </div>
+                 )}
+                 
+                {activeTab === 'Packaging' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card title={t('Packaging Yield & Costs')} icon={<BottleIcon className="w-5 h-5"/>}>
+                             <Input 
+                                label={t('Packaging Yield (%)')} 
+                                name="packagingYield" 
+                                type="number"
+                                step="1"
+                                min="0" max="100"
+                                value={formData.processParameters.packagingYield ?? ''} 
+                                onChange={handleProcessParamChange} 
+                                unit="%"
+                            />
+                             <Input 
+                                label={t('Other Costs per Batch')} 
+                                name="other" 
+                                type="number"
+                                step="0.01"
+                                containerClassName="mt-4"
+                                value={formData.additionalCosts.other ?? ''} 
+                                onChange={handleAdditionalCostChange} 
+                                unit="€"
+                            />
+                            <div className="mt-6 bg-color-background p-4 rounded-lg space-y-2 text-sm">
+                                <CostRow label={t('Raw Material Cost')} value={rawMaterialCost} />
+                                <CostRow label={t('Operational Costs per Batch')} value={operationalCostsPerBatch} />
+                                <CostRow label={t('Excise Duty per Batch')} value={calculatedExciseDuty} />
+                                <CostRow label={t('Other Costs')} value={otherRecipeCosts} />
+                            </div>
+                        </Card>
+                        <Card title={t('Packaged Items')} icon={<BottleIcon className="w-5 h-5"/>}>
+                            <PackagingManager
+                                items={formData.packagedItems}
+                                onUpdate={(newList) => handleUpdateList('packagedItems', newList)}
+                                masterItems={finishedGoodsMasterItems}
+                                categories={categories}
+                                t={t}
+                            />
                         </Card>
                     </div>
                 )}
             </div>
+            
+            <div className="mt-8 flex justify-end space-x-4">
+                 <button type="button" onClick={onBack} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg shadow-md transition-colors">
+                    {t('Cancel')}
+                </button>
+                <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                    {t('Save')}
+                </button>
+            </div>
         </form>
     );
 };
+
+// Sub-components
+
+const QcInput: React.FC<{
+    label: string,
+    field: keyof QualityControlSpecification,
+    value: QualityControlValueSpec,
+    onChange: (field: keyof QualityControlSpecification, subfield: keyof QualityControlValueSpec, value: string) => void,
+}> = ({ label, field, value, onChange }) => {
+    const { t } = useTranslation();
+
+    const tolerance = useMemo(() => {
+        if (value && value.target !== undefined && value.max !== undefined && value.min !== undefined) {
+            const tol1 = value.max - value.target;
+            const tol2 = value.target - value.min;
+            if (tol1 >= 0 && tol2 >= 0 && Math.abs(tol1 - tol2) < 0.001) { // Check for symmetry
+                return parseFloat(tol1.toPrecision(15));
+            }
+        }
+        return undefined;
+    }, [value]);
+
+    const handleTargetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newTargetStr = e.target.value;
+        onChange(field, 'target', newTargetStr);
+
+        const newTarget = newTargetStr === '' ? undefined : parseFloat(newTargetStr);
+        if (newTarget !== undefined && tolerance !== undefined) {
+            const newMin = newTarget - tolerance;
+            const newMax = newTarget + tolerance;
+            onChange(field, 'min', String(newMin));
+            onChange(field, 'max', String(newMax));
+        }
+    };
+    
+    const handleToleranceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newToleranceStr = e.target.value;
+        const newTolerance = newToleranceStr === '' ? undefined : parseFloat(newToleranceStr);
+        
+        const target = value?.target;
+
+        if (target !== undefined && newTolerance !== undefined && newTolerance >= 0) {
+            const newMin = target - newTolerance;
+            const newMax = target + newTolerance;
+            onChange(field, 'min', String(newMin));
+            onChange(field, 'max', String(newMax));
+        } else {
+            onChange(field, 'min', '');
+            onChange(field, 'max', '');
+        }
+    };
+    
+    return (
+    <div>
+        <label className="mb-1 block text-sm font-medium text-gray-500">{label}</label>
+        <div className="flex items-center space-x-2">
+            <Input 
+                type="number" 
+                step="any" 
+                placeholder={t('Target')} 
+                value={value?.target ?? ''} 
+                onChange={handleTargetChange}
+                className="w-full text-center !p-2 text-lg font-bold"
+                aria-label={`${label} Target`}
+                containerClassName="flex-grow"
+            />
+            <div className="relative flex-shrink-0 w-28">
+                <span className="absolute inset-y-0 left-3 flex items-center text-gray-500 pointer-events-none">±</span>
+                <Input 
+                    type="number" 
+                    step="any" 
+                    placeholder={t('Tolerance')}
+                    value={tolerance ?? ''} 
+                    onChange={handleToleranceChange}
+                    className="w-full text-center !p-2 !pl-8"
+                    aria-label={`${label} Tolerance`}
+                />
+            </div>
+        </div>
+    </div>
+)};
+
+const IngredientSection = <T extends Ingredient>({ title, icon, items, onUpdate, ...rest }: { title: string, icon: React.ReactNode } & IngredientPanelProps<T>) => {
+    const handleUpdateItem = (index: number, field: keyof T, value: any) => {
+        const newItems = [...items];
+        newItems[index] = { ...newItems[index], [field]: value };
+        onUpdate(newItems);
+    };
+
+    const handleAddItem = () => {
+        const newItem: T = { id: generateId(), masterItemId: '', quantity: 0 } as T;
+        onUpdate([...items, newItem]);
+    };
+
+    const handleRemoveItem = (id: string) => {
+        onUpdate(items.filter(item => item.id !== id));
+    };
+
+    return (
+        <Card title={rest.t(title)} icon={icon}>
+            <div className="space-y-2">
+                {items.map((item, index) => (
+                    <IngredientRow
+                        key={item.id}
+                        item={item}
+                        index={index}
+                        onUpdate={handleUpdateItem}
+                        onRemove={handleRemoveItem}
+                        {...rest}
+                    />
+                ))}
+            </div>
+             <button type="button" onClick={handleAddItem} className="mt-4 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
+                <PlusCircleIcon className="w-5 h-5"/>
+                <span>{rest.t('Add Ingredient')}</span>
+            </button>
+        </Card>
+    );
+};
+
+type Step = MashStep | FermentationStep;
+const StepManager: React.FC<{
+    type: 'mash' | 'ferm';
+    steps: Step[];
+    onUpdate: (steps: Step[]) => void;
+    t: (key: string) => string;
+}> = ({ type, steps, onUpdate, t }) => {
+    // FIX: Widened the type of 'field' to allow updating properties specific to either MashStep or FermentationStep.
+    // The original `keyof Step` resolves to only common properties, causing type errors.
+    const handleUpdateStep = (index: number, field: keyof MashStep | keyof FermentationStep, value: any) => {
+        const newSteps = [...steps];
+        const parsedValue = (typeof (newSteps[index] as any)[field] === 'number') ? (value === '' ? undefined : parseFloat(value)) : value;
+        newSteps[index] = { ...newSteps[index], [field]: parsedValue };
+        onUpdate(newSteps);
+    };
+
+    const handleAddStep = () => {
+        const newStep = type === 'mash' 
+            ? { id: generateId(), type: 'Infusion', temperature: 65, duration: 60 }
+            : { id: generateId(), description: '', temperature: 19, pressure: 0.8, days: 7 };
+        onUpdate([...steps, newStep as Step]);
+    };
+
+    const handleRemoveStep = (id: string) => {
+        onUpdate(steps.filter(step => step.id !== id));
+    };
+
+    return (
+        <div className="space-y-2">
+            {steps.map((step, index) => (
+                <div key={step.id} className="grid grid-cols-12 gap-2 items-end bg-color-background/50 p-2 rounded-md">
+                    {type === 'mash' ? (
+                        <>
+                            <div className="col-span-12 md:col-span-3"> <Select label={t('Type')} value={(step as MashStep).type} onChange={e => handleUpdateStep(index, 'type', e.target.value)} className="py-1"> <option value="Infusion">{t('Infusion')}</option> <option value="Decoction">{t('Decoction')}</option> <option value="Temperature">{t('Temperature')}</option> </Select> </div>
+                            <div className="col-span-6 md:col-span-4"> <Input label={t('Temperature')} type="number" value={(step as MashStep).temperature ?? ''} onChange={e => handleUpdateStep(index, 'temperature', e.target.value)} unit="°C" className="py-1" /> </div>
+                            <div className="col-span-6 md:col-span-4"> <Input label={t('Duration')} type="number" value={(step as MashStep).duration ?? ''} onChange={e => handleUpdateStep(index, 'duration', e.target.value)} unit="min" className="py-1" /> </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="col-span-12 md:col-span-3"> <Input label={t('Description')} value={(step as FermentationStep).description} onChange={e => handleUpdateStep(index, 'description', e.target.value)} className="py-1" /> </div>
+                            <div className="col-span-4 md:col-span-2"> <Input label={t('Temperature')} type="number" value={(step as FermentationStep).temperature ?? ''} onChange={e => handleUpdateStep(index, 'temperature', e.target.value)} unit="°C" className="py-1" /> </div>
+                            <div className="col-span-4 md:col-span-2"> <Input label={t('Pressure')} type="number" step="0.1" value={(step as FermentationStep).pressure ?? ''} onChange={e => handleUpdateStep(index, 'pressure', e.target.value)} unit="Bar" className="py-1" /> </div>
+                            <div className="col-span-4 md:col-span-2"> <Input label={t('Days')} type="number" value={(step as FermentationStep).days ?? ''} onChange={e => handleUpdateStep(index, 'days', e.target.value)} className="py-1" /> </div>
+                        </>
+                    )}
+                     <div className="col-span-12 md:col-span-1 flex items-center justify-end"> <button type="button" onClick={() => handleRemoveStep(step.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100 transition-colors"> <TrashIcon className="w-5 h-5"/> </button> </div>
+                </div>
+            ))}
+             <button type="button" onClick={handleAddStep} className="mt-2 flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors"> <PlusCircleIcon className="w-5 h-5"/> <span>{t('Add Step')}</span> </button>
+        </div>
+    );
+};
+
+
+const PackagingManager: React.FC<{
+    items: PackagedItemLink[];
+    onUpdate: (items: PackagedItemLink[]) => void;
+    masterItems: MasterItem[];
+    categories: Category[];
+    t: (key: string) => string;
+}> = ({ items, onUpdate, masterItems, categories, t }) => {
+    const totalSplit = useMemo(() => items.reduce((sum, item) => sum + (item.packagingSplit || 0), 0), [items]);
+    const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+    const handleUpdateItem = (index: number, field: keyof PackagedItemLink | 'packagingIngredients', value: any) => {
+        const newItems = [...items];
+        if (field === 'packagingIngredients') {
+            newItems[index].packagingIngredients = value as Ingredient[];
+        } else {
+            const parsedValue = (field === 'packagingSplit') ? (value === '' ? undefined : parseFloat(value)) : value;
+            (newItems[index] as any)[field] = parsedValue;
+        }
+        onUpdate(newItems);
+    };
+
+    const handleAddItem = () => {
+        if (masterItems.length === 0) return;
+        const newItem: PackagedItemLink = { id: generateId(), masterItemId: masterItems[0].id, packagingSplit: 0, packagingIngredients: [] };
+        onUpdate([...items, newItem]);
+    };
+
+    const handleRemoveItem = (id: string) => {
+        onUpdate(items.filter(item => item.id !== id));
+    };
+
+    return (
+        <div className="space-y-2">
+            {items.map((item, index) => (
+                <div key={item.id} className="bg-color-background/50 p-2 rounded-md">
+                    <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-7">
+                            <Select label={t('Finished Good')} value={item.masterItemId} onChange={e => handleUpdateItem(index, 'masterItemId', e.target.value)} className="py-1">
+                                {masterItems.map(mi => <option key={mi.id} value={mi.id}>{mi.name}</option>)}
+                            </Select>
+                        </div>
+                        <div className="col-span-3">
+                            <Input label={t('Split')} type="number" min="0" max="100" value={item.packagingSplit ?? ''} onChange={e => handleUpdateItem(index, 'packagingSplit', e.target.value)} unit="%" className="py-1"/>
+                        </div>
+                        <div className="col-span-2 flex justify-end items-center space-x-1">
+                             <button type="button" onClick={() => setExpandedItemId(expandedItemId === item.id ? null : item.id)} className="p-2 text-gray-400 hover:text-color-secondary rounded-full hover:bg-color-secondary/10 transition-colors">
+                                <ChevronDownIcon className={`w-5 h-5 transition-transform ${expandedItemId === item.id ? 'rotate-180' : ''}`}/>
+                             </button>
+                             <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-2 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100 transition-colors">
+                                <TrashIcon className="w-5 h-5"/>
+                             </button>
+                        </div>
+                    </div>
+                    {expandedItemId === item.id && (
+                        <div className="mt-2 p-2 border-t border-color-border/30">
+                            <IngredientSection
+                                title="Packaging Ingredients"
+                                icon={<WrenchIcon className="w-5 h-5"/>}
+                                items={item.packagingIngredients}
+                                onUpdate={(newList) => handleUpdateItem(index, 'packagingIngredients', newList)}
+                                panelType="packaging"
+                                masterItems={masterItems}
+                                categories={categories}
+                                t={t}
+                                validCategoryNames={['Packaging Materials']}
+                            />
+                        </div>
+                    )}
+                </div>
+            ))}
+            <div className={`mt-2 text-right font-bold ${totalSplit !== 100 ? 'text-red-500' : 'text-green-500'}`}>
+                {t('Total Split')}: {totalSplit}%
+            </div>
+             <button type="button" onClick={handleAddItem} className="mt-2 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors"> <PlusCircleIcon className="w-5 h-5"/> <span>{t('Add Packaging Item')}</span> </button>
+        </div>
+    );
+};
+
+const CostRow: React.FC<{ label: string; value: number; isBold?: boolean; color?: string }> = ({ label, value, isBold, color = 'text-color-text' }) => (
+    <div className="flex justify-between items-center">
+        <span className="text-gray-500">{label}</span>
+        <span className={`${isBold ? 'font-bold' : ''} ${color} font-mono`}>{value.toFixed(2)} €</span>
+    </div>
+);
+
 
 export default RecipeFormPage;

@@ -1,13 +1,14 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BrewSheet, Recipe, Location } from '../types';
 import EmptyState from '../components/ui/EmptyState';
-import { PlusCircleIcon, ArrowRightIcon, TrashIcon, BeakerIcon, LinkIcon } from '../components/Icons';
+import { PlusCircleIcon, ArrowRightIcon, TrashIcon, BeakerIcon, LinkIcon, ArrowRightLeftIcon } from '../components/Icons';
 import { useTranslation } from '../hooks/useTranslation';
 import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ChangeTankModal from '../components/ChangeTankModal';
-import { useToast } from '../hooks/useToast';
+import CreateBatchModal from '../components/CreateBatchModal';
+import TransferBatchModal from '../components/TransferBatchModal';
 
 interface BatchesListPageProps {
     batches: BrewSheet[];
@@ -18,6 +19,7 @@ interface BatchesListPageProps {
     onDeleteBatch: (batchId: string) => void;
     onCreateLinkedBatch: (parentBatchId: string, cookDate: string, fermenterIdOverride?: string) => void;
     onUpdateBatchDetails: (batchId: string, updates: Partial<BrewSheet>) => void;
+    onTransferBatch: (batchId: string, newFermenterId: string, transferDate: string) => void;
 }
 
 const statusColors: { [key in BrewSheet['status']]: string } = {
@@ -28,7 +30,7 @@ const statusColors: { [key in BrewSheet['status']]: string } = {
     'Completed': 'bg-gray-500',
 };
 
-const BatchCard: React.FC<{ batch: BrewSheet, allBatches: BrewSheet[], onSelect: () => void, onDelete: () => void, onAddTurn: () => void, t: (key: string) => string, locations: Location[] }> = ({ batch, allBatches, onSelect, onDelete, onAddTurn, t, locations }) => {
+const BatchCard: React.FC<{ batch: BrewSheet, allBatches: BrewSheet[], onSelect: () => void, onDelete: () => void, onAddTurn: () => void, onTransfer: () => void, t: (key: string) => string, locations: Location[] }> = ({ batch, allBatches, onSelect, onDelete, onAddTurn, onTransfer, t, locations }) => {
     const fermenterName = locations.find(l => l.id === batch.fermenterId)?.name || 'N/A';
     
     const handleDeleteClick = (e: React.MouseEvent) => {
@@ -41,9 +43,16 @@ const BatchCard: React.FC<{ batch: BrewSheet, allBatches: BrewSheet[], onSelect:
         onAddTurn();
     };
 
+    const handleTransferClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onTransfer();
+    };
+
     const parentLot = useMemo(() => {
         if (!batch.linkedBatchId) return null;
-        return allBatches.find(b => b.id === batch.linkedBatchId)?.lot;
+        const motherBatch = allBatches.find(b => b.id === batch.linkedBatchId);
+        if(!motherBatch) return null;
+        return motherBatch.lot.split('/')[0];
     }, [batch.linkedBatchId, allBatches]);
 
     return (
@@ -66,180 +75,44 @@ const BatchCard: React.FC<{ batch: BrewSheet, allBatches: BrewSheet[], onSelect:
                         <span>{t('Cook Date')}: {batch.cookDate}</span> | <span>{t('Fermenter')}: {fermenterName}</span>
                     </div>
                 </div>
-                <div className="flex items-center space-x-4 self-end sm:self-center">
+                <div className="flex items-center space-x-2 md:space-x-4 self-end sm:self-center">
                     <div className="flex items-center space-x-2">
                         <div className={`w-3 h-3 rounded-full ${statusColors[batch.status]}`}></div>
                         <span className="text-sm font-semibold">{t(batch.status)}</span>
                     </div>
-                    {!batch.linkedBatchId && !['Completed', 'Packaged'].includes(batch.status) && (
-                         <button 
-                            onClick={handleAddTurnClick} 
-                            className="flex items-center space-x-1.5 py-1.5 px-3 rounded-lg text-sm font-semibold bg-color-secondary/10 text-color-secondary hover:bg-color-secondary/20 transition-colors z-10"
-                            aria-label={`Add turn for batch ${batch.beerName}, lot ${batch.lot}`}
-                            title={t('Add Turn')}
+                    <div className="flex items-center space-x-2">
+                        {['In Progress', 'Fermenting'].includes(batch.status) && (
+                            <button
+                                onClick={handleTransferClick}
+                                className="flex items-center space-x-1.5 py-1.5 px-3 rounded-lg text-sm font-semibold bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500/20 transition-colors z-10"
+                                aria-label={`Transfer batch ${batch.beerName}, lot ${batch.lot}`}
+                                title={t('Transfer Batch')}
+                            >
+                                <ArrowRightLeftIcon className="w-4 h-4" />
+                                <span className="hidden md:inline">{t('Transfer')}</span>
+                            </button>
+                        )}
+                        {!batch.linkedBatchId && !['Completed', 'Packaged'].includes(batch.status) && (
+                             <button 
+                                onClick={handleAddTurnClick} 
+                                className="flex items-center space-x-1.5 py-1.5 px-3 rounded-lg text-sm font-semibold bg-color-secondary/10 text-color-secondary hover:bg-color-secondary/20 transition-colors z-10"
+                                aria-label={`Add turn for batch ${batch.beerName}, lot ${batch.lot}`}
+                                title={t('Add Turn')}
+                            >
+                                <PlusCircleIcon className="w-4 h-4" />
+                                <span className="hidden md:inline">{t('Add Turn')}</span>
+                            </button>
+                        )}
+                        <button 
+                            onClick={handleDeleteClick} 
+                            className="p-2 rounded-full text-gray-500 hover:bg-color-background hover:text-red-500 focus:opacity-100 transition-colors z-10"
+                            aria-label={`Delete batch ${batch.beerName}, lot ${batch.lot}`}
                         >
-                            <PlusCircleIcon className="w-4 h-4" />
-                            <span>{t('Add Turn')}</span>
+                            <TrashIcon className="w-5 h-5" />
                         </button>
-                    )}
-                    <button 
-                        onClick={handleDeleteClick} 
-                        className="p-2 rounded-full text-gray-500 hover:bg-color-background hover:text-red-500 focus:opacity-100 transition-colors z-10"
-                        aria-label={`Delete batch ${batch.beerName}, lot ${batch.lot}`}
-                    >
-                        <TrashIcon className="w-5 h-5" />
-                    </button>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
-};
-
-interface CreateBatchModalProps {
-    isOpen: boolean;
-    recipes: Recipe[];
-    locations: Location[];
-    batches: BrewSheet[];
-    onClose: () => void;
-    onCreate: (recipeId: string, details: { cookDate: string; fermenterId: string; }) => void;
-    onValidationFail: (info: any) => void;
-    t: (key: string) => string;
-}
-
-const CreateBatchModal: React.FC<CreateBatchModalProps> = ({ isOpen, recipes, locations, batches, onClose, onCreate, onValidationFail, t }) => {
-    const [selectedRecipe, setSelectedRecipe] = useState(recipes.length > 0 ? recipes[0].id : '');
-    const [cookDate, setCookDate] = useState(new Date().toISOString().split('T')[0]);
-    const toast = useToast();
-    
-    const tanks = useMemo(() => locations.filter(l => l.type === 'Tank'), [locations]);
-    const [fermenterId, setFermenterId] = useState(tanks.length > 0 ? tanks[0].id : '');
-
-    useEffect(() => {
-        if (isOpen) {
-            setSelectedRecipe(recipes.length > 0 ? recipes[0].id : '');
-            setCookDate(new Date().toISOString().split('T')[0]);
-            const currentTanks = locations.filter(l => l.type === 'Tank');
-            setFermenterId(currentTanks.length > 0 ? currentTanks[0].id : '');
-        }
-    }, [isOpen, recipes, locations]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedRecipe || !cookDate || !fermenterId) return;
-        
-        const recipe = recipes.find(r => r.id === selectedRecipe);
-        const tank = locations.find(l => l.id === fermenterId);
-        if (!recipe || !tank) return;
-
-        // --- TANK OCCUPANCY CHECK (FIXED) ---
-        const parseDateAsUTC = (dateString: string): Date => {
-            const [year, month, day] = dateString.split('-').map(Number);
-            return new Date(Date.UTC(year, month - 1, day));
-        };
-
-        const newBatchStartDate = parseDateAsUTC(cookDate);
-
-        const conflictingBatch = batches.find(b => {
-            if (b.fermenterId !== fermenterId || ['Completed', 'Packaged'].includes(b.status)) {
-                return false;
-            }
-
-            const existingRecipe = recipes.find(r => r.id === b.recipeId);
-            if (!existingRecipe) return false;
-
-            // Calculate the last day the tank is occupied by this batch.
-            // This is either the explicit packaging date, or the calculated end of fermentation.
-            let lastOccupiedDate: Date;
-            if (b.packagingLog.packagingDate) {
-                lastOccupiedDate = parseDateAsUTC(b.packagingLog.packagingDate);
-            } else {
-                const duration = existingRecipe.fermentationSteps.reduce((sum, step) => sum + step.days, 0);
-                const startDate = parseDateAsUTC(b.cookDate);
-                lastOccupiedDate = new Date(startDate.getTime());
-                // The last occupied day is the cook date + total duration - 1.
-                // e.g., A 1-day step on the cook date means duration is 1, and the last day is cookDate + 0.
-                if (duration > 0) {
-                    lastOccupiedDate.setUTCDate(lastOccupiedDate.getUTCDate() + duration - 1);
-                }
-            }
-
-            // A conflict exists if the new batch starts on or before the last occupied day.
-            return newBatchStartDate.getTime() <= lastOccupiedDate.getTime();
-        });
-
-        if (conflictingBatch) {
-            const conflictingRecipe = recipes.find(r => r.id === conflictingBatch.recipeId)!;
-            
-            let lastOccupiedDate: Date;
-             if (conflictingBatch.packagingLog.packagingDate) {
-                lastOccupiedDate = parseDateAsUTC(conflictingBatch.packagingLog.packagingDate);
-            } else {
-                const duration = conflictingRecipe.fermentationSteps.reduce((sum, step) => sum + step.days, 0);
-                const startDate = parseDateAsUTC(conflictingBatch.cookDate);
-                lastOccupiedDate = new Date(startDate.getTime());
-                if (duration > 0) {
-                    lastOccupiedDate.setUTCDate(lastOccupiedDate.getUTCDate() + duration - 1);
-                }
-            }
-            const firstFreeDay = new Date(lastOccupiedDate.getTime());
-            firstFreeDay.setUTCDate(firstFreeDay.getUTCDate() + 1);
-            
-            toast.error(
-                `${t('Tank')} ${tank.name} ${t('is occupied by lot')} ${conflictingBatch.lot}. ${t('Available from')} ${firstFreeDay.toLocaleDateString(undefined, { timeZone: 'UTC' })}.`
-            );
-            return;
-        }
-        // --- END OF CHECK ---
-
-        const targetVolume = recipe.qualityControlSpec.liters.target || 0;
-        const tankVolume = tank.grossVolumeL || 0;
-
-        if (targetVolume > tankVolume) {
-            onValidationFail({
-                requiredVolume: targetVolume,
-                pendingCreation: {
-                    type: 'new',
-                    data: { recipeId: selectedRecipe, cookDate, fermenterId }
-                }
-            });
-            onClose();
-        } else {
-            onCreate(selectedRecipe, { cookDate, fermenterId });
-            onClose();
-        }
-    };
-
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 transition-opacity duration-300" onClick={onClose}>
-            <div 
-                className="bg-color-surface p-6 md:p-8 rounded-lg shadow-xl w-full max-w-lg transform transition-all duration-300 scale-95 animate-fade-in-scale"
-                onClick={(e) => e.stopPropagation()}
-                style={{animation: 'fade-in-scale 0.3s forwards'}}
-            >
-                <h2 className="text-2xl font-bold text-color-accent mb-6">{t('Create New Batch')}</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Select label={t('Recipe')} value={selectedRecipe} onChange={e => setSelectedRecipe(e.target.value)}>
-                        {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                    </Select>
-                    <Input label={t('Cook Date')} type="date" value={cookDate} onChange={e => setCookDate(e.target.value)} required />
-                    <Select label={t('Fermenter')} value={fermenterId} onChange={e => setFermenterId(e.target.value)} required>
-                        {tanks.map(tank => <option key={tank.id} value={tank.id}>{tank.name} ({tank.grossVolumeL} L)</option>)}
-                    </Select>
-                    <div className="flex justify-end space-x-4 pt-4">
-                        <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
-                        <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg">{t('Create')}</button>
-                    </div>
-                </form>
-            </div>
-             <style>{`
-                @keyframes fade-in-scale {
-                    from { opacity: 0; transform: scale(0.95); }
-                    to { opacity: 1; transform: scale(1); }
-                }
-                .animate-fade-in-scale { animation: fade-in-scale 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-            `}</style>
         </div>
     );
 };
@@ -269,17 +142,24 @@ const CreateTurnModal: React.FC<CreateTurnModalProps> = ({ isOpen, parentBatch, 
         e.preventDefault();
         if (!parentBatch) return;
 
-        const parentRecipe = recipes.find(r => r.id === parentBatch.recipeId);
+        // Find the ultimate mother batch to get the base recipe
+        let motherBatch = parentBatch;
+        while(motherBatch.linkedBatchId) {
+            const nextParent = allBatches.find(b => b.id === motherBatch.linkedBatchId);
+            if (!nextParent) break;
+            motherBatch = nextParent;
+        }
+
+        const parentRecipe = recipes.find(r => r.id === motherBatch.recipeId);
         if (!parentRecipe) return;
 
-        const childBatches = allBatches.filter(b => b.linkedBatchId === parentBatch.id);
-
-        let totalVolume = parentRecipe.qualityControlSpec.liters.target || 0;
-        childBatches.forEach(child => {
-            const childRecipe = recipes.find(r => r.id === child.recipeId);
-            totalVolume += childRecipe?.qualityControlSpec.liters.target || 0;
-        });
-        totalVolume += parentRecipe.qualityControlSpec.liters.target || 0;
+        const allTurns = allBatches.filter(b => b.id === motherBatch.id || b.linkedBatchId === motherBatch.id);
+        
+        let totalVolume = allTurns.reduce((sum, turn) => {
+            const turnRecipe = recipes.find(r => r.id === turn.recipeId);
+            return sum + (turnRecipe?.qualityControlSpec.liters.target || 0);
+        }, 0);
+        totalVolume += parentRecipe.qualityControlSpec.liters.target; // For the new turn
 
         const tank = locations.find(l => l.id === parentBatch.fermenterId);
         const tankVolume = tank?.grossVolumeL || 0;
@@ -329,7 +209,7 @@ const CreateTurnModal: React.FC<CreateTurnModalProps> = ({ isOpen, parentBatch, 
     );
 };
 
-const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, locations, onSelectBatch, onCreateBatch, onDeleteBatch, onCreateLinkedBatch, onUpdateBatchDetails }) => {
+const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, locations, onSelectBatch, onCreateBatch, onDeleteBatch, onCreateLinkedBatch, onUpdateBatchDetails, onTransferBatch }) => {
     const { t } = useTranslation();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -343,6 +223,13 @@ const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, loc
     const [isChangeTankModalOpen, setIsChangeTankModalOpen] = useState(false);
     const [tankValidationInfo, setTankValidationInfo] = useState<{ requiredVolume: number; pendingCreation: { type: 'new'; data: { recipeId: string; cookDate: string; fermenterId: string; } } | { type: 'turn'; data: { parentBatch: BrewSheet; cookDate: string; } } } | null>(null);
 
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [batchToTransfer, setBatchToTransfer] = useState<BrewSheet | null>(null);
+
+    const handleTransferRequest = (batch: BrewSheet) => {
+        setBatchToTransfer(batch);
+        setIsTransferModalOpen(true);
+    };
 
     const handleAddTurnRequest = (batch: BrewSheet) => {
         setParentBatchForTurn(batch);
@@ -439,6 +326,15 @@ const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, loc
                 onValidationFail={handleTankValidationFail}
                 t={t}
             />
+            <TransferBatchModal
+                isOpen={isTransferModalOpen}
+                onClose={() => setIsTransferModalOpen(false)}
+                onConfirm={onTransferBatch}
+                batch={batchToTransfer}
+                locations={locations}
+                recipes={recipes}
+                batches={batches}
+            />
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
                 onClose={() => setIsConfirmModalOpen(false)}
@@ -458,20 +354,21 @@ const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, loc
                 />
             )}
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Batches')}</h1>
-                <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                    <PlusCircleIcon className="w-6 h-6" />
-                    <span>{t('New Batch')}</span>
-                </button>
-            </div>
-
-            <div className="mb-4">
-                <Input
-                    placeholder={t('Search by name or lot number...')}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4 flex-shrink-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-color-text">{t('Batches')}</h1>
+                <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+                    <div className="flex-grow sm:max-w-xs">
+                        <Input
+                            placeholder={t('Search by name or lot number...')}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button onClick={() => setIsCreateModalOpen(true)} className="flex-shrink-0 flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-3 rounded-lg shadow transition-transform transform hover:scale-105 text-sm">
+                        <PlusCircleIcon className="w-5 h-5" />
+                        <span className="hidden sm:inline">{t('New Batch')}</span>
+                    </button>
+                </div>
             </div>
             
             <div className="border-b border-color-border mb-4">
@@ -502,6 +399,7 @@ const BatchesListPage: React.FC<BatchesListPageProps> = ({ batches, recipes, loc
                             onSelect={() => onSelectBatch(batch)} 
                             onDelete={() => handleDeleteRequest(batch)}
                             onAddTurn={() => handleAddTurnRequest(batch)}
+                            onTransfer={() => handleTransferRequest(batch)}
                             t={t}
                             locations={locations}
                         />

@@ -38,6 +38,7 @@ const navItems = [
         subItems: [
             { page: Page.Orders, icon: ShoppingBagIcon, labelKey: 'Orders' },
             { page: Page.Customers, icon: UsersIcon, labelKey: 'Customers' },
+            { page: Page.FinishedGoodsWarehouse, icon: ArchiveIcon, labelKey: 'Finished Goods' },
             { page: Page.CustomerPriceLists, icon: UsersIcon, labelKey: 'Customer Price Lists' },
             { page: Page.Shipping, icon: TruckIcon, labelKey: 'Shipping' },
         ]

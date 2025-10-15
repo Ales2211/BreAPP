@@ -126,20 +126,21 @@ const RecipesListPage: React.FC<RecipesListPageProps> = ({ recipes, masterItems,
                 message={`${t('Are you sure you want to delete recipe')} "${recipeToDelete?.name}"? ${t('This action cannot be undone.')}`}
             />
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Recipes')}</h1>
-                <button onClick={onNewRecipe} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                    <PlusCircleIcon className="w-6 h-6" />
-                    <span>{t('New Recipe')}</span>
-                </button>
-            </div>
-
-            <div className="mb-4">
-                <Input
-                    placeholder={t('Search by name or style...')}
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                />
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 flex-shrink-0">
+                <h1 className="text-3xl font-bold text-color-text">{t('Recipes')}</h1>
+                <div className="flex items-center gap-4 w-full md:w-auto md:flex-1 md:justify-end">
+                    <div className="flex-grow max-w-sm">
+                        <Input
+                            placeholder={t('Search by name or style...')}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button onClick={onNewRecipe} className="flex-shrink-0 flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <PlusCircleIcon className="w-6 h-6" />
+                        <span>{t('New Recipe')}</span>
+                    </button>
+                </div>
             </div>
             
             {filteredRecipes.length > 0 ? (

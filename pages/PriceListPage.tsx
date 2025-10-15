@@ -41,41 +41,44 @@ const PriceListPage: React.FC<PriceListPageProps> = ({
         : 0;
 
     return recipes.map(recipe => {
-      const rawMaterialCost = [...recipe.mashIngredients, ...recipe.boilWhirlpoolIngredients, ...recipe.tankIngredients]
-        .reduce((acc, ing) => {
-          const item = masterItems.find(mi => mi.id === ing.masterItemId);
-          return acc + (ing.quantity * (item?.purchaseCost || 0));
-        }, 0);
+        const beerIngredientsCost = [...recipe.mashIngredients, ...recipe.boilWhirlpoolIngredients, ...recipe.tankIngredients]
+            .reduce((acc, ing) => {
+                const item = masterItems.find(mi => mi.id === ing.masterItemId);
+                return acc + (ing.quantity * (item?.purchaseCost || 0));
+            }, 0);
 
-      const packagingCost = recipe.packagingIngredients.reduce((acc, ing) => {
-        const item = masterItems.find(mi => mi.id === ing.masterItemId);
-        return acc + (ing.quantity * (item?.purchaseCost || 0));
-      }, 0);
-      
-      const otherRecipeCosts = Object.values(recipe.additionalCosts || {}).reduce((sum: number, cost) => sum + (Number(cost) || 0), 0);
-      
-      const packagedLiters = (recipe.qualityControlSpec.liters.target || 0) * ((recipe.processParameters.packagingYield || 0) / 100);
-      
-      const exciseDutyPerBatch = (recipe.qualityControlSpec.og.target || 0) * (packagedLiters / 100) * (exciseDutyRate || 0);
+        const otherRecipeCosts = Object.values(recipe.additionalCosts || {}).reduce((sum: number, cost) => sum + (Number(cost) || 0), 0);
+        const packagedLiters = (recipe.qualityControlSpec.liters.target || 0) * ((recipe.processParameters.packagingYield || 0) / 100);
+        const exciseDutyPerBatch = (recipe.qualityControlSpec.og.target || 0) * (packagedLiters / 100) * (exciseDutyRate || 0);
 
-      const grandTotalCost = rawMaterialCost + packagingCost + otherRecipeCosts + operationalCostsPerBatch + exciseDutyPerBatch;
+        const totalBeerCost = beerIngredientsCost + operationalCostsPerBatch + otherRecipeCosts + exciseDutyPerBatch;
+        const costOfBeerPerLiter = packagedLiters > 0 ? totalBeerCost / packagedLiters : 0;
       
-      const packagedItemsWithCost = recipe.packagedItems.map(packagedItem => {
-        const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
-        if (!masterItem) return null;
+        const packagedItemsWithCost = recipe.packagedItems.map(packagedItem => {
+            const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
+            if (!masterItem || !masterItem.containerVolumeL) return null;
 
-        const split = (packagedItem.packagingSplit || 0) / 100;
-        const totalCostForFormat = grandTotalCost * split;
-        const litersInFormat = packagedLiters * split;
-        const costPerLiterFormat = litersInFormat > 0 ? totalCostForFormat / litersInFormat : 0;
-        const costPerUnit = costPerLiterFormat * (masterItem.containerVolumeL || 0);
+            const packagingMaterialsCost = packagedItem.packagingIngredients.reduce((acc, ing) => {
+                const item = masterItems.find(mi => mi.id === ing.masterItemId);
+                return acc + (ing.quantity * (item?.purchaseCost || 0));
+            }, 0);
+
+            const split = (packagedItem.packagingSplit || 0) / 100;
+            const litersInFormat = packagedLiters * split;
+            const numberOfUnits = litersInFormat / masterItem.containerVolumeL;
+
+            const packagingCostPerUnit = numberOfUnits > 0 ? packagingMaterialsCost / numberOfUnits : 0;
+            const costOfBeerInUnit = costOfBeerPerLiter * masterItem.containerVolumeL;
+            
+            const costPerUnit = costOfBeerInUnit + packagingCostPerUnit;
+            const costPerLiter = costPerUnit / masterItem.containerVolumeL;
         
         return {
             masterItem,
             costPerUnit,
-            costPerLiter: costPerLiterFormat,
+            costPerLiter,
         };
-      }).filter(Boolean);
+      }).filter((item): item is NonNullable<typeof item> => item !== null);
 
       return {
         recipe,
@@ -123,19 +126,20 @@ const PriceListPage: React.FC<PriceListPageProps> = ({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-        <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Price List Calculator')}</h1>
-        <button onClick={handleSave} className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
-            {t('Save Prices')}
-        </button>
-      </div>
-
-      <div className="mb-4">
-        <Input
-          placeholder={t('Search by product name...')}
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-6 flex-shrink-0">
+          <h1 className="text-3xl font-bold text-color-text">{t('Price List Calculator')}</h1>
+          <div className="flex items-center gap-4 w-full md:w-auto md:flex-1 md:justify-end">
+              <div className="flex-grow max-w-sm">
+                  <Input
+                    placeholder={t('Search by product name...')}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+              </div>
+              <button onClick={handleSave} className="flex-shrink-0 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                  {t('Save Prices')}
+              </button>
+          </div>
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-6">
@@ -166,8 +170,8 @@ const PriceListPage: React.FC<PriceListPageProps> = ({
                                 return (
                                     <tr key={item!.masterItem.id}>
                                         <td className="p-2 font-semibold">{item!.masterItem.name}</td>
-                                        <td className="p-2 text-right font-mono">{item!.costPerUnit.toFixed(2)} €</td>
-                                        <td className="p-2 text-right font-mono">{item!.costPerLiter.toFixed(2)} €</td>
+                                        <td className="p-2 text-right font-mono">{item!.costPerUnit.toFixed(3)} €</td>
+                                        <td className="p-2 text-right font-mono">{item!.costPerLiter.toFixed(3)} €</td>
                                         <td className="p-2 text-right">
                                             <Input
                                                 type="number"

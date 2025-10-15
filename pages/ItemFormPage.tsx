@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { MasterItem, Category, Supplier } from '../types';
+import { MasterItem, Category, Supplier, Unit } from '../types';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Card from '../components/ui/Card';
@@ -69,109 +69,77 @@ const ItemFormPage: React.FC<ItemFormPageProps> = ({ item, categories, suppliers
     }
     
     const isFinishedGood = useMemo(() => {
-        const itemCategory = categories.find(c => c.id === formData.categoryId);
-        if (!itemCategory) return false;
+        const selectedCategory = categories.find(c => c.id === formData.categoryId);
+        if (!selectedCategory) return false;
 
-        const finishedGoodsCategory = categories.find(c => c.name === 'Finished Goods');
-        if (!finishedGoodsCategory) return false;
+        if (selectedCategory.name === 'Finished Goods') return true;
 
-        return itemCategory.parentCategoryId === finishedGoodsCategory.id || itemCategory.id === finishedGoodsCategory.id;
+        const parentCategory = categories.find(p => p.id === selectedCategory.parentCategoryId);
+        return parentCategory?.name === 'Finished Goods';
     }, [formData.categoryId, categories]);
-    
-    // Fix: Corrected 'Lt' to 'L' to match the Unit type definition.
-    const units: MasterItem['unit'][] = ['Kg', 'g', 'L', 'pcs'];
 
     return (
         <form onSubmit={handleSave} className="max-w-4xl mx-auto">
-            <div className="flex items-center mb-6">
-                <button type="button" onClick={onBack} className="p-2 mr-4 rounded-full hover:bg-color-border/50 transition-colors">
+            <div className="flex items-center mb-4">
+                <button type="button" onClick={onBack} className="p-1.5 mr-2 rounded-full hover:bg-color-border/50 transition-colors">
                     <ArrowLeftIcon className="w-6 h-6"/>
                 </button>
-                <h1 className="text-3xl font-bold text-color-text">
-                    {item ? t('Edit Item') : t('Create Item')}
+                <h1 className="text-xl sm:text-2xl font-bold text-color-text">
+                    {('id' in formData && formData.id) ? t('Edit Item') : t('Create Item')}
                 </h1>
             </div>
             
-            <Card title={t('General Information')}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input containerClassName="md:col-span-2" label={t('Item Name')} name="name" value={formData.name} onChange={handleChange} required />
+            <Card>
+                <div className="space-y-4">
+                    <Input label={t('Item Name')} name="name" value={formData.name} onChange={handleChange} required />
                     
-                    <Select label={t('Category')} name="categoryId" value={formData.categoryId} onChange={handleChange}>
-                        {groupedCategories.map(parent => (
-                            <optgroup key={parent.id} label={t(parent.name)}>
-                                {parent.children.map(child => (
-                                    <option key={child.id} value={child.id}>{t(child.name)}</option>
-                                ))}
-                            </optgroup>
-                        ))}
-                    </Select>
-                    
-                    {!isFinishedGood && (
-                        <Select 
-                            label={t('Default Supplier')}
-                            name="defaultSupplierId" 
-                            value={formData.defaultSupplierId || ''} 
-                            onChange={handleChange} 
+                    <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-500">{t('Category')}</label>
+                        <select
+                            name="categoryId"
+                            value={formData.categoryId}
+                            onChange={handleChange}
+                            className="w-full bg-color-background border border-color-border rounded-md py-2 px-3 text-color-text focus:outline-none focus:border-color-accent focus:ring-1 focus:ring-color-accent transition-colors"
                         >
-                            <option value="">{t('None')}</option>
-                            {suppliers.map(sup => <option key={sup.id} value={sup.id}>{sup.name}</option>)}
+                            {groupedCategories.map(parent => (
+                                <optgroup key={parent.id} label={t(parent.name)}>
+                                    {parent.children.map(child => (
+                                        <option key={child.id} value={child.id}>{t(child.name)}</option>
+                                    ))}
+                                </optgroup>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Select label={t('Unit')} name="unit" value={formData.unit} onChange={handleChange}>
+                            <option value="Kg">Kg</option>
+                            <option value="g">g</option>
+                            <option value="L">L</option>
+                            <option value="pcs">pcs</option>
                         </Select>
+
+                        <Input label={t('Format')} name="format" type="number" value={formData.format || ''} onChange={handleNumericChange} unit={formData.unit}/>
+                    </div>
+
+                    {isFinishedGood && (
+                         <Input label={t('Container Volume (L)')} name="containerVolumeL" type="number" step="any" value={formData.containerVolumeL || ''} onChange={handleNumericChange} unit="L"/>
                     )}
 
-                    <Select label={t('Unit')} name="unit" value={formData.unit} onChange={handleChange}>
-                        {units.map(u => <option key={u} value={u}>{u}</option>)}
+                    <Select label={t('Default Supplier')} name="defaultSupplierId" value={formData.defaultSupplierId || ''} onChange={handleChange}>
+                        <option value="">{t('Select a supplier...')}</option>
+                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </Select>
-
-                    <Input 
-                        label={`${t('Format')} (${formData.unit})`}
-                        name="format" 
-                        type="number"
-                        step="any"
-                        value={formData.format ?? ''} 
-                        onChange={handleNumericChange} 
-                    />
                     
-                     {isFinishedGood && (
-                        <Input 
-                            label={`${t('Container Volume')} (L)`}
-                            name="containerVolumeL" 
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={formData.containerVolumeL ?? ''} 
-                            onChange={handleNumericChange} 
-                        />
-                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Input label={t('Purchase Cost')} name="purchaseCost" type="number" step="any" value={formData.purchaseCost || ''} onChange={handleNumericChange} unit={`€ / ${formData.unit}`} />
+                        <Input label={t('Sale Price')} name="salePrice" type="number" step="any" value={formData.salePrice || ''} onChange={handleNumericChange} unit={`€ / ${formData.unit}`} />
+                    </div>
 
-                    <Input 
-                        label={`${t('Purchase Cost')} (€/${formData.unit})`}
-                        name="purchaseCost" 
-                        type="number"
-                        step="0.01"
-                        value={formData.purchaseCost ?? ''} 
-                        onChange={handleNumericChange} 
-                    />
-                    <Input 
-                        label={`${t('Sale Price')} (€/${formData.unit})`}
-                        name="salePrice" 
-                        type="number"
-                        step="0.01"
-                        value={formData.salePrice ?? ''} 
-                        onChange={handleNumericChange} 
-                    />
-                     <Input 
-                        label={t('Reorder Point')}
-                        name="reorderPoint" 
-                        type="number"
-                        step="any"
-                        value={formData.reorderPoint ?? ''} 
-                        onChange={handleNumericChange} 
-                        unit={formData.unit}
-                        containerClassName="md:col-span-2"
-                    />
+                    <Input label={t('Reorder Point')} name="reorderPoint" type="number" step="any" value={formData.reorderPoint || ''} onChange={handleNumericChange} unit={formData.unit}/>
                 </div>
             </Card>
-            
+
             <div className="mt-8 flex justify-end space-x-4">
                  <button type="button" onClick={onBack} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg shadow-md transition-colors">
                     {t('Cancel')}

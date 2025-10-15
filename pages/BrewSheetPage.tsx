@@ -1,13 +1,40 @@
+
+
 import React, { useState, useMemo, useEffect } from 'react';
 // FIX: Added BoilWhirlpoolIngredient and TankIngredient to imports to fix casting errors.
-import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep, BoilWhirlpoolIngredient, TankIngredient, Page } from '../types';
+import { BrewSheet, LogEntry, MasterItem, WarehouseItem, ActualIngredient, ActualBoilWhirlpoolIngredient, ActualTankIngredient, Category, Unit, PackagedItemActual, Recipe, Location, LotAssignment, Ingredient, MashStep, BoilWhirlpoolIngredient, TankIngredient, Page, QualityControlValueSpec, FermentationStep } from '../types';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Modal from '../components/ui/Modal';
 import { useTranslation } from '../hooks/useTranslation';
 import { useToast } from '../hooks/useToast';
-import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MashTunIcon, DropletIcon, ThermometerIcon, YeastIcon, BottleIcon, DownloadIcon, ArrowRightIcon, WrenchIcon, LinkIcon } from '../components/Icons';
+import { ArrowLeftIcon, PlusCircleIcon, TrashIcon, MashTunIcon, DropletIcon, ThermometerIcon, YeastIcon, BottleIcon, DownloadIcon, ArrowRightIcon, WrenchIcon, LinkIcon, ArrowRightLeftIcon, ChartBarIcon, HopsIcon, SnowflakeIcon, PencilIcon, ClipboardListIcon, CheckCircleIcon, AlertTriangleIcon } from '../components/Icons';
+import TransferBatchModal from '../components/TransferBatchModal';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ChartOptions,
+  ChartData
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 interface BrewSheetPageProps {
   batch: BrewSheet;
@@ -22,6 +49,7 @@ interface BrewSheetPageProps {
   onUnloadItems: (items: Omit<WarehouseItem, 'id'>[]) => void;
   onLoadFinishedGoods: (items: Omit<WarehouseItem, 'id'>[]) => void;
   onNavigate: (page: { page: Page, id: string }) => void;
+  onTransferBatch: (batchId: string, newFermenterId: string, transferDate: string) => void;
 }
 
 type UnloadItem = {
@@ -126,7 +154,13 @@ const UnloadMaterialsCard: React.FC<{
 
     const packagingCategoryIds = useMemo(() => {
         const parent = categories.find(c => c.name === 'Category_Packaging');
-        return parent ? [parent.id] : [];
+        if (!parent) return [];
+
+        const childIds = categories
+            .filter(c => c.parentCategoryId === parent.id)
+            .map(c => c.id);
+
+        return [parent.id, ...childIds];
     }, [categories]);
     
     const packagingMasterItems = useMemo(() => masterItems.filter(mi => packagingCategoryIds.includes(mi.categoryId)), [masterItems, packagingCategoryIds]);
@@ -270,7 +304,7 @@ const LotAssignmentManager: React.FC<{
         const ingIndex = newIngredients.findIndex(i => i.id === ingId);
         if (ingIndex === -1) return;
 
-        newIngredients[ingIndex].lotAssignments.push({ id: generateUniqueId('lot'), lotNumber: '', quantity: 0 });
+        newIngredients[ingIndex].lotAssignments.push({ id: generateUniqueId('lot'), lotNumber: '', quantity: undefined });
         onUpdate(newIngredients);
     };
 
@@ -282,6 +316,8 @@ const LotAssignmentManager: React.FC<{
         newIngredients[ingIndex].lotAssignments = newIngredients[ingIndex].lotAssignments.filter((_, i) => i !== assignIndex);
         onUpdate(newIngredients);
     };
+
+    const parseValue = (value: string) => value === '' ? undefined : parseFloat(value);
 
     return (
         <div className="space-y-4">
@@ -357,8 +393,8 @@ const LotAssignmentManager: React.FC<{
                                         <Input
                                             type="number"
                                             step="any"
-                                            value={assignment.quantity || ''}
-                                            onChange={e => handleLotAssignmentChange(actualIng.id, assignIndex, 'quantity', parseFloat(e.target.value) || 0)}
+                                            value={assignment.quantity ?? ''}
+                                            onChange={e => handleLotAssignmentChange(actualIng.id, assignIndex, 'quantity', parseValue(e.target.value))}
                                             unit={masterItem.unit}
                                             className="py-1 text-sm"
                                             aria-label={`${t('Quantity')} for ${masterItem.name} lot ${assignment.lotNumber}`}
@@ -397,13 +433,14 @@ const LotAssignmentManager: React.FC<{
 };
 
 
-const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems, onLoadFinishedGoods, onNavigate }) => {
+const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipes, masterItems, warehouseItems, categories, locations, onBack, onSave, onUnloadItems, onLoadFinishedGoods, onNavigate, onTransferBatch }) => {
     const { t } = useTranslation();
     const toast = useToast();
     const [currentBatch, setCurrentBatch] = useState<BrewSheet>(batch);
     const [activeTab, setActiveTab] = useState('Mash');
     const [unloadList, setUnloadList] = useState<UnloadItem[]>([]);
     const [isStatusWizardOpen, setIsStatusWizardOpen] = useState(false);
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     
     useEffect(() => {
         setCurrentBatch(batch);
@@ -484,26 +521,6 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
         const num = parseFloat(value);
         return isNaN(num) ? undefined : num;
     };
-
-    const handleLogChange = (index: number, field: keyof LogEntry, value: any) => {
-        const newLogs = [...currentBatch.fermentationLog.actual.logEntries];
-        newLogs[index] = { ...newLogs[index], [field]: value };
-        handleDeepChange('fermentationLog.actual.logEntries', newLogs);
-    }
-
-    const addLogEntry = () => {
-        const newLog: LogEntry = {
-            id: generateUniqueId('log'),
-            timestamp: new Date().toISOString(),
-            temperature: 0, gravity: 0, ph: 0, notes: '',
-        };
-        handleDeepChange('fermentationLog.actual.logEntries', [...currentBatch.fermentationLog.actual.logEntries, newLog]);
-    }
-
-    const removeLogEntry = (index: number) => {
-        const newLogs = currentBatch.fermentationLog.actual.logEntries.filter((_, i) => i !== index);
-        handleDeepChange('fermentationLog.actual.logEntries', newLogs);
-    }
     
     const handleSave = () => { onSave(currentBatch); }
 
@@ -545,19 +562,19 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
         });
     };
     
-    const handleUnloadForStage = (stage: 'mash' | 'boil' | 'fermentation') => {
-        const ingredients = stage === 'mash' ? currentBatch.mashLog.actual.ingredients : stage === 'boil' ? currentBatch.boilLog.actual.ingredients : currentBatch.fermentationLog.actual.additions;
-        const stageName = stage === 'mash' ? t('Mash') : stage === 'boil' ? t('Boil') : t('Fermentation');
+    const handleUnloadForStage = (stage: 'mash' | 'boil') => {
+        const ingredients = stage === 'mash' ? currentBatch.mashLog.actual.ingredients : currentBatch.boilLog.actual.ingredients;
+        const stageName = stage === 'mash' ? t('Mash') : t('Boil');
 
         const itemsToUnload = ingredients
             .flatMap(ing => ing.lotAssignments.map(assignment => ({
                 masterItemId: ing.masterItemId, lotNumber: assignment.lotNumber, quantity: assignment.quantity,
                 locationId: '', expiryDate: '', documentNumber: `BREW-${currentBatch.lot}`, arrivalDate: currentBatch.cookDate,
             })))
-            .filter(item => item.quantity > 0 && item.lotNumber);
+            .filter(item => item.quantity && item.quantity > 0 && item.lotNumber);
 
         if (itemsToUnload.length > 0) {
-            onUnloadItems(itemsToUnload);
+            onUnloadItems(itemsToUnload as Omit<WarehouseItem, 'id'>[]);
             handleDeepChange(`unloadStatus.${stage}`, true);
             toast.success(`${t('Ingredients for')} ${stageName} ${t('have been unloaded')}.`);
         } else {
@@ -572,11 +589,16 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
             return;
         }
 
+        const baseLot = currentBatch.lot.split('/')[0];
+
         const itemsToLoad = currentBatch.packagingLog.packagedItems
             .filter(item => item.quantityGood && item.quantityGood > 0)
             .map(item => ({
-                masterItemId: item.masterItemId, lotNumber: currentBatch.lot, quantity: item.quantityGood!,
-                locationId: finishedGoodsLocation.id, expiryDate: currentBatch.packagingLog.bestBeforeDate || '',
+                masterItemId: item.masterItemId,
+                lotNumber: baseLot,
+                quantity: item.quantityGood!,
+                locationId: finishedGoodsLocation.id,
+                expiryDate: currentBatch.packagingLog.bestBeforeDate || '',
                 documentNumber: `PKG-${currentBatch.lot}`,
                 arrivalDate: currentBatch.packagingLog.packagingDate || new Date().toISOString().split('T')[0],
             }));
@@ -636,7 +658,8 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
         { name: 'Lauter', icon: <DropletIcon className="w-5 h-5"/> },
         { name: 'Boil', icon: <ThermometerIcon className="w-5 h-5"/> },
         { name: 'Fermentation', icon: <YeastIcon className="w-5 h-5"/> },
-        { name: 'BrewStep_Packaging', icon: <BottleIcon className="w-5 h-5"/> }
+        { name: 'BrewStep_Packaging', icon: <BottleIcon className="w-5 h-5"/> },
+        { name: 'Summary', icon: <ClipboardListIcon className="w-5 h-5"/> }
     ];
 
     if (parentBatch) {
@@ -672,15 +695,22 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
         label: string;
         expectedValue: string | number | undefined;
         expectedUnit?: string;
+        expectedMin?: number;
+        expectedMax?: number;
         calculatedDuration?: number | null;
         children: React.ReactNode;
-    }> = ({ label, expectedValue, expectedUnit, children, calculatedDuration }) => (
+    }> = ({ label, expectedValue, expectedUnit, expectedMin, expectedMax, children, calculatedDuration }) => (
         <div>
             <label className="mb-1 block text-sm font-medium text-gray-500">{label}</label>
             {children}
             <div className="flex justify-between items-center mt-1 text-xs">
                 {expectedValue !== undefined && expectedValue !== null && (
-                    <p className="text-gray-500">{t('Expected')}: <span className="font-semibold">{expectedValue} {expectedUnit}</span></p>
+                    <p className="text-gray-500">
+                        {t('Expected')}: <span className="font-semibold">{expectedValue} {expectedUnit}</span>
+                        {(expectedMin !== undefined && expectedMax !== undefined) && (
+                            <span className="ml-2 font-normal text-gray-400">[{expectedMin} - {expectedMax}]</span>
+                        )}
+                    </p>
                 )}
                 {calculatedDuration !== undefined && (
                      <p className="text-color-secondary font-semibold">
@@ -709,6 +739,65 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
         return 0;
     }, [currentBatch.boilLog.actual.coolingWortCounterStart, currentBatch.boilLog.actual.coolingWortCounterEnd]);
 
+    const allIngredientsUsed = useMemo(() => {
+        const ingredients: { stage: string, item: MasterItem | undefined, lot: LotAssignment }[] = [];
+        
+        const addFromStage = (stageName: string, actuals: ActualIngredient[]) => {
+            actuals.forEach(ing => {
+                const masterItem = masterItems.find(mi => mi.id === ing.masterItemId);
+                ing.lotAssignments.forEach(lot => {
+                    if(lot.quantity && lot.quantity > 0 && lot.lotNumber) {
+                        ingredients.push({ stage: stageName, item: masterItem, lot });
+                    }
+                });
+            });
+        };
+    
+        addFromStage(t('Mash'), currentBatch.mashLog.actual.ingredients);
+        addFromStage(t('Boil'), currentBatch.boilLog.actual.ingredients as ActualIngredient[]);
+        addFromStage(t('Fermentation'), currentBatch.fermentationLog.actual.additions as ActualIngredient[]);
+        
+        return ingredients;
+    }, [currentBatch, masterItems, t]);
+    
+    const comparisonParams = useMemo(() => {
+        if (!recipe) return [];
+    
+        const getLastLogValue = (prop: 'gravity' | 'ph'): number | undefined => {
+            for (let i = currentBatch.fermentationLog.actual.logEntries.length - 1; i >= 0; i--) {
+                const entry = currentBatch.fermentationLog.actual.logEntries[i];
+                if (entry[prop] !== undefined && entry[prop] !== null) {
+                    return entry[prop];
+                }
+            }
+            return undefined;
+        };
+    
+        const checkSpec = (value: number | undefined, spec: QualityControlValueSpec | undefined): boolean | null => {
+            if (value === undefined || value === null || !spec || spec.min === undefined || spec.max === undefined) {
+                return null;
+            }
+            return value >= spec.min && value <= spec.max;
+        };
+        
+        const formatExpected = (spec: QualityControlValueSpec, unit: string, precision: number = 2) => {
+            if (spec.target === undefined) return 'N/A';
+            return `${spec.target.toFixed(precision)} ${unit} [${spec.min?.toFixed(precision)} - ${spec.max?.toFixed(precision)}]`;
+        };
+    
+        const parameters = [
+            { name: t('OG'), expected: formatExpected(recipe.qualityControlSpec.og, '°P'), actual: currentBatch.boilLog.actual.postBoilPlato, unit: '°P', precision: 2, inSpec: checkSpec(currentBatch.boilLog.actual.postBoilPlato, recipe.qualityControlSpec.og) },
+            { name: t('Final Gravity'), expected: formatExpected(recipe.qualityControlSpec.fg, '°P'), actual: getLastLogValue('gravity'), unit: '°P', precision: 2, inSpec: checkSpec(getLastLogValue('gravity'), recipe.qualityControlSpec.fg) },
+            { name: t('Final Volume'), expected: formatExpected(recipe.qualityControlSpec.liters, 'L', 0), actual: coolingWortLiters, unit: 'L', precision: 0, inSpec: checkSpec(coolingWortLiters, recipe.qualityControlSpec.liters) },
+            { name: t('Mash pH'), expected: `${recipe.processParameters.expectedMashPh?.toFixed(2)} [${(recipe.processParameters.expectedMashPh! - 0.1).toFixed(2)} - ${(recipe.processParameters.expectedMashPh! + 0.1).toFixed(2)}]`, actual: currentBatch.mashLog.actual.mashPh, unit: '', precision: 2, inSpec: checkSpec(currentBatch.mashLog.actual.mashPh, { target: recipe.processParameters.expectedMashPh, min: (recipe.processParameters.expectedMashPh || 0) - 0.1, max: (recipe.processParameters.expectedMashPh || 0) + 0.1 }) },
+            { name: t('Pre-Ferm pH'), expected: formatExpected(recipe.qualityControlSpec.preFermentationPh, ''), actual: currentBatch.boilLog.actual.postBoilPh, unit: '', precision: 2, inSpec: checkSpec(currentBatch.boilLog.actual.postBoilPh, recipe.qualityControlSpec.preFermentationPh) },
+            { name: t('Final pH'), expected: formatExpected(recipe.qualityControlSpec.finalPh, ''), actual: getLastLogValue('ph'), unit: '', precision: 2, inSpec: checkSpec(getLastLogValue('ph'), recipe.qualityControlSpec.finalPh) },
+            { name: t('Packaging Yield'), expected: `${recipe.processParameters.packagingYield.toFixed(1)}%`, actual: packagingSummary.totalYield, unit: '%', precision: 1, inSpec: checkSpec(packagingSummary.totalYield, { target: recipe.processParameters.packagingYield, min: recipe.processParameters.packagingYield - 5, max: 100}) },
+        ];
+    
+        return parameters;
+    }, [currentBatch, recipe, t, coolingWortLiters, packagingSummary]);
+
     return (
         <div className="h-full flex flex-col">
             <StatusWizardModal 
@@ -717,6 +806,15 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                 batch={currentBatch}
                 onConfirm={handleStatusUpdate}
                 t={t}
+            />
+            <TransferBatchModal
+                isOpen={isTransferModalOpen}
+                onClose={() => setIsTransferModalOpen(false)}
+                onConfirm={onTransferBatch}
+                batch={currentBatch}
+                locations={locations}
+                recipes={recipes}
+                batches={allBatches}
             />
             {parentBatch && (
                 <div className="bg-blue-100 border-l-4 border-blue-500 text-blue-700 p-4 mb-6" role="alert">
@@ -728,36 +826,44 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                     </p>
                 </div>
             )}
-             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-6 flex-shrink-0">
-                <div className="flex items-center mb-4 sm:mb-0">
-                    <button type="button" onClick={onBack} className="p-2 mr-2 md:mr-4 rounded-full hover:bg-color-border transition-colors">
-                        <ArrowLeftIcon className="w-6 h-6"/>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4 flex-shrink-0">
+                {/* Left side: Title */}
+                <div className="flex items-center min-w-0 flex-1">
+                    <button type="button" onClick={onBack} className="p-1.5 mr-2 rounded-full hover:bg-color-border/50 transition-colors">
+                        <ArrowLeftIcon className="w-5 h-5"/>
                     </button>
                     <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline flex-wrap gap-x-3">
-                            <h1 className="text-xl md:text-3xl font-bold text-color-text truncate">
+                        <div className="flex items-baseline flex-wrap gap-x-2">
+                            <h1 className="text-base sm:text-lg font-bold text-color-text truncate">
                                 {currentBatch.beerName} - {currentBatch.lot}
                             </h1>
-                            <span className="text-lg md:text-xl text-gray-500 font-medium whitespace-nowrap">({fermenterName})</span>
+                            <span className="text-xs sm:text-sm text-gray-500 font-medium whitespace-nowrap">({fermenterName})</span>
                         </div>
-                        <p className="text-sm text-gray-500">{t('Brew Sheet')}</p>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-4 w-full sm:w-auto">
-                    <div className="w-full sm:w-48">
-                        <label className="mb-1 block text-sm font-medium text-gray-500">{t('Current Status')}</label>
-                        <button 
-                            type="button"
-                            onClick={() => setIsStatusWizardOpen(true)}
-                            disabled={currentBatch.status === 'Completed'}
-                            className="w-full flex items-center justify-between space-x-2 bg-color-surface border border-color-border rounded-md py-2 px-3 text-color-text font-bold text-left hover:border-color-accent disabled:cursor-not-allowed disabled:bg-color-background"
-                        >
-                            <span>{t(currentBatch.status)}</span>
-                            {currentBatch.status !== 'Completed' && <ArrowRightIcon className="w-5 h-5 text-color-accent"/>}
-                        </button>
-                    </div>
-                    <button onClick={handleSave} className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-transform transform hover:scale-105 w-full sm:w-auto self-end h-[42px]">
-                        {t('Save Batch')}
+                {/* Right side: Actions */}
+                <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-end">
+                    <button 
+                        onClick={() => setIsTransferModalOpen(true)} 
+                        disabled={!['In Progress', 'Fermenting'].includes(currentBatch.status)} 
+                        className="flex items-center justify-center space-x-1.5 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1.5 px-3 rounded-lg shadow transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed text-xs sm:text-sm"
+                        title={t('Transfer Tank')}
+                    >
+                        <ArrowRightLeftIcon className="w-4 h-4" />
+                        <span className="hidden sm:inline">{t('Transfer Tank')}</span>
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={() => setIsStatusWizardOpen(true)}
+                        disabled={currentBatch.status === 'Completed'}
+                        className="flex items-center justify-between space-x-2 w-32 sm:w-36 bg-color-surface border border-color-border rounded-lg py-1.5 px-3 text-color-text font-bold text-left hover:border-color-accent disabled:cursor-not-allowed disabled:bg-color-background text-xs sm:text-sm"
+                        title={t('Change Status')}
+                    >
+                        <span className="truncate">{t(currentBatch.status)}</span>
+                        {currentBatch.status !== 'Completed' && <ArrowRightIcon className="w-4 h-4 text-color-accent"/>}
+                    </button>
+                    <button onClick={handleSave} className="bg-color-accent hover:bg-orange-500 text-white font-bold py-1.5 px-4 rounded-lg shadow transition-transform transform hover:scale-105 text-xs sm:text-sm">
+                        {t('Save')}
                     </button>
                 </div>
             </div>
@@ -993,10 +1099,21 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                                 <ActualInput label={t('Post-Boil Liters')} expectedValue={currentBatch.boilLog.expected.postBoilLiters} expectedUnit="L">
                                     <Input type="number" step="any" value={currentBatch.boilLog.actual.postBoilLiters ?? ''} onChange={e => handleDeepChange('boilLog.actual.postBoilLiters', parseNumeric(e.target.value))} />
                                 </ActualInput>
-                                <ActualInput label={t('Post-Boil Plato')} expectedValue={currentBatch.boilLog.expected.postBoilPlato} expectedUnit="°P">
+                                <ActualInput 
+                                    label={t('Post-Boil Plato')} 
+                                    expectedValue={currentBatch.boilLog.expected.postBoilPlato} 
+                                    expectedUnit="°P"
+                                    expectedMin={recipe?.qualityControlSpec.og.min}
+                                    expectedMax={recipe?.qualityControlSpec.og.max}
+                                >
                                     <Input type="number" step="0.1" value={currentBatch.boilLog.actual.postBoilPlato ?? ''} onChange={e => handleDeepChange('boilLog.actual.postBoilPlato', parseNumeric(e.target.value))} />
                                 </ActualInput>
-                                <ActualInput label={t('Post-Boil pH')} expectedValue={currentBatch.boilLog.expected.postBoilPh}>
+                                <ActualInput 
+                                    label={t('Post-Boil pH')} 
+                                    expectedValue={currentBatch.boilLog.expected.postBoilPh}
+                                    expectedMin={recipe?.qualityControlSpec.preFermentationPh.min}
+                                    expectedMax={recipe?.qualityControlSpec.preFermentationPh.max}
+                                >
                                     <Input type="number" step="0.01" value={currentBatch.boilLog.actual.postBoilPh ?? ''} onChange={e => handleDeepChange('boilLog.actual.postBoilPh', parseNumeric(e.target.value))} />
                                 </ActualInput>
                             </div>
@@ -1026,6 +1143,30 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                                     </div>
                                 </ActualInput>
                             </div>
+                            <div className="border-t border-color-border/30 pt-4 mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <ActualInput 
+                                    label={t('Boil Water Addition')} 
+                                    expectedValue={currentBatch.boilLog.expected.boilWaterAdditionL}
+                                    expectedUnit="L"
+                                >
+                                    <Input 
+                                        type="number" 
+                                        step="any" 
+                                        value={currentBatch.boilLog.actual.boilWaterAdditionL ?? ''} 
+                                        onChange={e => handleDeepChange('boilLog.actual.boilWaterAdditionL', parseNumeric(e.target.value))} 
+                                        unit="L"
+                                    />
+                                </ActualInput>
+                                <ActualInput 
+                                    label={t('Notes')} 
+                                    expectedValue={currentBatch.boilLog.expected.boilWaterAdditionNotes}
+                                >
+                                    <Input 
+                                        value={currentBatch.boilLog.actual.boilWaterAdditionNotes ?? ''} 
+                                        onChange={e => handleDeepChange('boilLog.actual.boilWaterAdditionNotes', e.target.value)} 
+                                    />
+                                </ActualInput>
+                            </div>
                         </Card>
                         <Card title={t('LiterCounterReadings')}>
                             <table className="w-full text-left">
@@ -1045,7 +1186,15 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                                         <td className="py-2 text-center font-bold font-mono text-color-accent">{coolingWashingLiters.toFixed(2)}</td>
                                     </tr>
                                     <tr>
-                                        <td className="py-2 font-semibold">{t('WortLiterCounter')}</td>
+                                        <td className="py-2 font-semibold">
+                                            {t('WortLiterCounter')}
+                                            <p className="text-xs text-gray-500 font-normal">
+                                                {t('Expected')}: {totalExpectedLiters.toFixed(2)} L
+                                                {(recipe?.qualityControlSpec.liters.min !== undefined && recipe?.qualityControlSpec.liters.max !== undefined) && (
+                                                    <span className="ml-2">[{recipe.qualityControlSpec.liters.min} - {recipe.qualityControlSpec.liters.max}]</span>
+                                                )}
+                                            </p>
+                                        </td>
                                         <td><Input type="number" step="any" value={currentBatch.boilLog.actual.coolingWortCounterStart ?? ''} onChange={e => handleDeepChange('boilLog.actual.coolingWortCounterStart', parseNumeric(e.target.value))} className="text-center" /></td>
                                         <td><Input type="number" step="any" value={currentBatch.boilLog.actual.coolingWortCounterEnd ?? ''} onChange={e => handleDeepChange('boilLog.actual.coolingWortCounterEnd', parseNumeric(e.target.value))} className="text-center" /></td>
                                         <td className="py-2 text-center font-bold font-mono text-color-accent">{coolingWortLiters.toFixed(2)}</td>
@@ -1064,52 +1213,15 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                     </div>
                 )}
                 {activeTab === 'Fermentation' && (
-                    <div className="space-y-6">
-                        <Card title={t('Expected Steps')} icon={<YeastIcon className="w-5 h-5"/>}>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left text-sm">
-                                    <thead><tr className="border-b-2 border-color-border/50">
-                                        <th className="p-2">{t('Step Description')}</th>
-                                        <th className="p-2 text-right">{t('Temperature (°C)')}</th>
-                                        <th className="p-2 text-right">{t('Pressure (Bar)')}</th>
-                                        <th className="p-2 text-right">{t('Days')}</th>
-                                    </tr></thead>
-                                    <tbody className="divide-y divide-color-border/20">
-                                    {currentBatch.fermentationLog.expected.steps.map(step => (
-                                        <tr key={step.id}>
-                                            <td className="p-2">{step.description}</td>
-                                            <td className="p-2 text-right font-mono">{step.temperature}</td>
-                                            <td className="p-2 text-right font-mono">{step.pressure}</td>
-                                            <td className="p-2 text-right font-mono">{step.days}</td>
-                                        </tr>
-                                    ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </Card>
-                        <Card title={t('Additions')}>
-                            <div className="flex justify-end mb-2">
-                                <button type="button" onClick={() => handleUnloadForStage('fermentation')} disabled={currentBatch.unloadStatus.fermentation || !areAllQuantitiesAssigned('fermentation')} className="bg-color-secondary text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 disabled:cursor-not-allowed hover:bg-blue-600 transition-colors">
-                                    {currentBatch.unloadStatus.fermentation ? t('Ingredients Unloaded') : t('Unload Ingredients')}
-                                </button>
-                            </div>
-                            <LotAssignmentManager ingredients={currentBatch.fermentationLog.actual.additions as ActualIngredient[]} expectedIngredients={currentBatch.fermentationLog.expected.additions} masterItems={masterItems} warehouseItems={warehouseItems} onUpdate={(updated) => handleDeepChange('fermentationLog.actual.additions', updated)} t={t} />
-                        </Card>
-                        <Card title={t('Fermentation Log')}>
-                            {currentBatch.fermentationLog.actual.logEntries.map((entry, index) => (
-                                <div key={entry.id} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-center mb-2 bg-color-background p-2 rounded-md">
-                                    <Input type="datetime-local" value={entry.timestamp.substring(0, 16)} onChange={e => handleLogChange(index, 'timestamp', new Date(e.target.value).toISOString())} showTimeNowButton />
-                                    <Input type="number" step="0.1" unit="°P" placeholder={t('Gravity (°P)')} value={entry.gravity} onChange={e => handleLogChange(index, 'gravity', parseFloat(e.target.value))} />
-                                    <Input type="number" step="0.01" unit="pH" placeholder={t('pH')} value={entry.ph} onChange={e => handleLogChange(index, 'ph', parseFloat(e.target.value))} />
-                                    <Input placeholder={t('Notes')} value={entry.notes} onChange={e => handleLogChange(index, 'notes', e.target.value)} />
-                                    <button onClick={() => removeLogEntry(index)} className="p-2 text-red-500 hover:text-red-400 justify-self-end"><TrashIcon className="w-5 h-5"/></button>
-                                </div>
-                            ))}
-                            <button onClick={addLogEntry} className="mt-4 flex items-center justify-center w-full space-x-2 text-center py-2 bg-color-border/50 hover:bg-color-border rounded-md font-semibold text-color-accent transition-colors">
-                                <PlusCircleIcon className="w-5 h-5"/><span>{t('Add Log Entry')}</span>
-                            </button>
-                        </Card>
-                    </div>
+                    <FermentationSection 
+                        batch={currentBatch}
+                        onDeepChange={handleDeepChange}
+                        onSave={onSave}
+                        t={t}
+                        masterItems={masterItems}
+                        warehouseItems={warehouseItems}
+                        onUnloadItems={onUnloadItems}
+                    />
                 )}
                 {activeTab === 'BrewStep_Packaging' && (
                     <div className="space-y-6">
@@ -1151,7 +1263,7 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mt-2">
-                                            <Input label={t('Quantity Good')} type="number" value={item.quantityGood || ''} onChange={e => handleDeepChange(`packagingLog.packagedItems.${index}.quantityGood`, parseNumeric(e.target.value))} unit={masterItem?.unit} />
+                                            <Input label={t('Quantity Good')} type="number" value={item.quantityGood ?? ''} onChange={e => handleDeepChange(`packagingLog.packagedItems.${index}.quantityGood`, parseNumeric(e.target.value))} unit={masterItem?.unit} />
                                         </div>
                                     </div>
                                 )
@@ -1174,7 +1286,580 @@ const BrewSheetPage: React.FC<BrewSheetPageProps> = ({ batch, allBatches, recipe
                         </Card>
                     </div>
                 )}
+                {activeTab === 'Summary' && (
+                    <div className="space-y-6">
+                        <Card title={t('Ingredient Summary')} icon={<ClipboardListIcon className="w-5 h-5"/>}>
+                            {allIngredientsUsed.length > 0 ? (
+                                <div className="overflow-x-auto rounded-lg border border-color-border/50">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-color-background">
+                                            <tr>
+                                                <th className="py-2 px-3 font-semibold">{t('Stage')}</th>
+                                                <th className="py-2 px-3 font-semibold">{t('Item Name')}</th>
+                                                <th className="py-2 px-3 font-semibold">{t('Lot Number')}</th>
+                                                <th className="py-2 px-3 font-semibold text-right">{t('Quantity')}</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-color-border/50">
+                                            {allIngredientsUsed.map(({ stage, item, lot }, index) => (
+                                                <tr key={index} className="bg-color-background/50">
+                                                    <td className="py-2 px-3">{stage}</td>
+                                                    <td className="py-2 px-3 font-semibold">{item?.name}</td>
+                                                    <td className="py-2 px-3 font-mono">{lot.lotNumber}</td>
+                                                    <td className="py-2 px-3 text-right font-mono">{lot.quantity?.toFixed(2)} {item?.unit}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : <p className="text-gray-500 text-center py-4">{t('No ingredients with lots have been assigned yet.')}</p>}
+                        </Card>
+                        <Card title={t('Parameter Comparison')} icon={<ChartBarIcon className="w-5 h-5"/>}>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="border-b-2 border-color-border/50">
+                                        <tr>
+                                            <th className="py-2 px-3">{t('Parameter')}</th>
+                                            <th className="py-2 px-3">{t('Expected')}</th>
+                                            <th className="py-2 px-3">{t('Actual')}</th>
+                                            <th className="py-2 px-3 text-center">{t('Status')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-color-border/20">
+                                        {comparisonParams.map(param => (
+                                            <tr key={param.name}>
+                                                <td className="py-2 px-3 font-semibold">{param.name}</td>
+                                                <td className="py-2 px-3 font-mono">{param.expected}</td>
+                                                <td className="py-2 px-3 font-mono font-bold">{param.actual !== undefined && param.actual !== null ? `${Number(param.actual).toFixed(param.precision)} ${param.unit}` : t('N/A')}</td>
+                                                <td className="py-2 px-3 text-center">
+                                                    {param.inSpec === true && <CheckCircleIcon className="w-5 h-5 text-green-500 mx-auto" title={t('In Spec')} />}
+                                                    {param.inSpec === false && <AlertTriangleIcon className="w-5 h-5 text-red-500 mx-auto" title={t('Out of Spec')} />}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    </div>
+                )}
             </div>
+        </div>
+    );
+};
+
+// --- New Fermentation Section ---
+
+const addDays = (date: Date, days: number): Date => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+};
+
+interface LogEntryModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (entry: Omit<LogEntry, 'id'> | LogEntry) => void;
+    entryData: Partial<LogEntry> | null;
+    t: (key: string) => string;
+}
+
+const LogEntryModal: React.FC<LogEntryModalProps> = ({ isOpen, onClose, onSave, entryData, t }) => {
+    const [formData, setFormData] = useState<Partial<LogEntry>>({});
+
+    useEffect(() => {
+        if (isOpen) {
+            const initialDate = (entryData && entryData.timestamp) ? new Date(entryData.timestamp) : new Date();
+            
+            // Hack to format a local date to YYYY-MM-DDTHH:mm for datetime-local input
+            const timezoneOffset = initialDate.getTimezoneOffset() * 60000; //offset in milliseconds
+            const localISOTime = new Date(initialDate.getTime() - timezoneOffset).toISOString().slice(0, 16);
+            
+            setFormData({
+                ...(entryData || {}),
+                timestamp: localISOTime
+            });
+        }
+    }, [isOpen, entryData]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        const { name, value } = e.target;
+        setFormData(p => ({ ...p, [name]: value }));
+    };
+
+    const handleNumericChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(p => ({ ...p, [name]: value === '' ? undefined : parseFloat(value) }));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formData.timestamp) return;
+
+        const entryToSave = {
+            ...formData,
+            // The value from datetime-local is parsed as local time by new Date()
+            timestamp: new Date(formData.timestamp as string).toISOString(),
+            type: 'measurement' as const,
+        };
+        onSave(entryToSave as LogEntry);
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={formData.id ? t('Edit Log Entry') : t('Add Log Entry')}>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <Input label={t('Date and Time')} type="datetime-local" name="timestamp" value={formData.timestamp || ''} onChange={handleChange} required />
+                <div className="grid grid-cols-2 gap-4">
+                    <Input label={t('Temperature (°C)')} type="number" step="0.1" name="temperature" value={formData.temperature ?? ''} onChange={handleNumericChange} />
+                    <Input label={t('Gravity (°P)')} type="number" step="0.1" name="gravity" value={formData.gravity ?? ''} onChange={handleNumericChange} />
+                    <Input label={t('pH')} type="number" step="0.01" name="ph" value={formData.ph ?? ''} onChange={handleNumericChange} />
+                    <Input label={t('Pressure (Bar)')} type="number" step="0.1" name="pressure" value={formData.pressure ?? ''} onChange={handleNumericChange} />
+                </div>
+                <div>
+                    <label className="mb-1 block text-sm font-medium text-gray-500">{t('Notes')}</label>
+                    <textarea name="notes" value={formData.notes || ''} onChange={handleChange} rows={3} className="w-full bg-color-background border border-color-border rounded-md p-2" />
+                </div>
+                <div className="flex justify-end space-x-4 pt-4">
+                    <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
+                    <button type="submit" className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg">{t('Save')}</button>
+                </div>
+            </form>
+        </Modal>
+    );
+};
+
+const AdditionConfirmationModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (updatedAddition: ActualTankIngredient) => void;
+    data: { planned: TankIngredient; actual: ActualTankIngredient } | null;
+    masterItems: MasterItem[];
+    warehouseItems: WarehouseItem[];
+    t: (key:string) => string;
+}> = ({ isOpen, onClose, onSave, data, masterItems, warehouseItems, t }) => {
+    
+    const [currentAssignments, setCurrentAssignments] = useState<LotAssignment[]>([]);
+    
+    useEffect(() => {
+        if (data) {
+            setCurrentAssignments(JSON.parse(JSON.stringify(data.actual.lotAssignments)));
+        }
+    }, [data]);
+
+    if (!isOpen || !data) return null;
+
+    const masterItem = masterItems.find(mi => mi.id === data.planned.masterItemId);
+    if (!masterItem) return null;
+
+    const totalAssigned = currentAssignments.reduce((sum, lot) => sum + (lot.quantity || 0), 0);
+    const expectedQty = data.planned.quantity;
+    const isComplete = Math.abs(totalAssigned - expectedQty) < 0.001;
+
+    const availableLots = warehouseItems
+        .filter(whItem => whItem.masterItemId === masterItem.id && whItem.quantity > 0)
+        .map(item => item.lotNumber)
+        .filter((value, index, self) => self.indexOf(value) === index);
+    
+    const parseValue = (value: string) => value === '' ? undefined : parseFloat(value);
+
+    const handleAssignmentChange = (assignIndex: number, field: keyof LotAssignment, value: any) => {
+        const newAssignments = [...currentAssignments];
+        newAssignments[assignIndex] = { ...newAssignments[assignIndex], [field]: value };
+        setCurrentAssignments(newAssignments);
+    };
+
+    const addAssignment = () => {
+        setCurrentAssignments(prev => [...prev, { id: generateUniqueId('lot'), lotNumber: '', quantity: undefined }]);
+    };
+
+    const removeAssignment = (assignIndex: number) => {
+        setCurrentAssignments(prev => prev.filter((_, i) => i !== assignIndex));
+    };
+
+    const handleConfirmSave = () => {
+        onSave({ ...data.actual, lotAssignments: currentAssignments });
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={t('Confirm Addition')}>
+            <div className="space-y-4">
+                <div className="bg-color-background/50 p-3 rounded-lg border border-color-border/30">
+                    <div className="flex justify-between items-start mb-2">
+                        <div>
+                            <h5 className="font-bold text-lg text-color-text">{masterItem.name}</h5>
+                            <p className="text-sm text-gray-500">{t('Expected')}: {expectedQty.toFixed(2)} {masterItem.unit}</p>
+                        </div>
+                        <div className={`text-right text-sm font-semibold ${isComplete ? 'text-green-500' : 'text-orange-500'}`}>
+                            <p><span className="font-mono">{totalAssigned.toFixed(2)} / {expectedQty.toFixed(2)}</span> {masterItem.unit}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="space-y-2">
+                    {currentAssignments.length > 0 && (
+                        <div className="grid grid-cols-12 gap-2 items-center text-xs text-gray-500 font-semibold px-1">
+                            <div className="col-span-7">{t('Lot Number')}</div>
+                            <div className="col-span-4">{t('Quantity')}</div>
+                            <div className="col-span-1"></div>
+                        </div>
+                    )}
+                    {currentAssignments.map((assignment, assignIndex) => (
+                        <div key={assignment.id} className="grid grid-cols-12 gap-2 items-center">
+                            <div className="col-span-7">
+                                <Select
+                                    value={assignment.lotNumber}
+                                    onChange={e => handleAssignmentChange(assignIndex, 'lotNumber', e.target.value)}
+                                    className="w-full py-1 text-sm"
+                                >
+                                    <option value="">{t('Select Lot')}</option>
+                                    {availableLots.map(lot => <option key={lot} value={lot}>{lot}</option>)}
+                                </Select>
+                            </div>
+                            <div className="col-span-4">
+                                <Input
+                                    type="number"
+                                    step="any"
+                                    value={assignment.quantity ?? ''}
+                                    onChange={e => handleAssignmentChange(assignIndex, 'quantity', parseValue(e.target.value))}
+                                    unit={masterItem.unit}
+                                    className="py-1 text-sm"
+                                />
+                            </div>
+                            <div className="col-span-1 flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => removeAssignment(assignIndex)}
+                                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100 transition-colors"
+                                >
+                                    <TrashIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                
+                <div className="mt-2">
+                    <button
+                        type="button"
+                        onClick={addAssignment}
+                        className="flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors"
+                    >
+                        <PlusCircleIcon className="w-5 h-5" />
+                        <span>{t('Add Lot')}</span>
+                    </button>
+                </div>
+                
+                <div className="flex justify-end space-x-4 pt-4">
+                    <button type="button" onClick={onClose} className="bg-color-border hover:bg-gray-300 text-color-text font-bold py-2 px-6 rounded-lg">{t('Cancel')}</button>
+                    <button type="button" onClick={handleConfirmSave} className="bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-6 rounded-lg">{t('Confirm & Unload')}</button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+
+const FermentationSection: React.FC<{
+    batch: BrewSheet;
+    onDeepChange: (path: string, value: any) => void;
+    onSave: (batch: BrewSheet) => void;
+    t: (key: string) => string;
+    masterItems: MasterItem[];
+    warehouseItems: WarehouseItem[];
+    onUnloadItems: (items: Omit<WarehouseItem, 'id'>[]) => void;
+}> = ({ batch, onDeepChange, onSave, t, masterItems, warehouseItems, onUnloadItems }) => {
+    
+    const toast = useToast();
+    const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+    const [currentLogEntry, setCurrentLogEntry] = useState<Partial<LogEntry> | null>(null);
+    const [isAdditionModalOpen, setIsAdditionModalOpen] = useState(false);
+    const [currentAdditionToConfirm, setCurrentAdditionToConfirm] = useState<{ planned: TankIngredient; actual: ActualTankIngredient } | null>(null);
+    const [currentBatch, setCurrentBatch] = useState<BrewSheet>(batch);
+
+    useEffect(() => {
+        setCurrentBatch(batch);
+    }, [batch]);
+
+    const chartData = useMemo<ChartData<'line'>>(() => {
+        const totalDays = batch.fermentationLog.expected.steps.reduce((sum, step) => sum + step.days, 0) + 5;
+        const labels = Array.from({ length: totalDays }, (_, i) => `${t('Day')} ${i}`);
+        
+        const plannedTemps: (number | null)[] = [];
+        let cumulativeDays = 0;
+        batch.fermentationLog.expected.steps.forEach(step => {
+            for(let i=0; i<step.days; i++) {
+                if (cumulativeDays + i < totalDays) {
+                    plannedTemps[cumulativeDays + i] = step.temperature;
+                }
+            }
+            cumulativeDays += step.days;
+        });
+
+        const actualTemps: (number | null)[] = Array(totalDays).fill(null);
+        const gravities: (number | null)[] = Array(totalDays).fill(null);
+        
+        batch.fermentationLog.actual.logEntries.forEach(log => {
+            if (log.type === 'measurement' && log.timestamp) {
+                const logDate = new Date(log.timestamp);
+                const cookDate = new Date(batch.cookDate);
+                const dayIndex = Math.floor((logDate.getTime() - cookDate.getTime()) / (1000 * 3600 * 24));
+                if (dayIndex >= 0 && dayIndex < totalDays) {
+                    if(log.temperature !== undefined) actualTemps[dayIndex] = log.temperature;
+                    if(log.gravity !== undefined) gravities[dayIndex] = log.gravity;
+                }
+            }
+        });
+
+        return {
+            labels,
+            datasets: [
+                { label: t('Planned Temp.'), data: plannedTemps, borderColor: 'rgba(253, 126, 20, 0.5)', backgroundColor: 'rgba(253, 126, 20, 0.1)', yAxisID: 'yTemp', borderDash: [5, 5], tension: 0.1, pointRadius: 0 },
+                { label: t('Actual Temp.'), data: actualTemps, borderColor: 'rgb(253, 126, 20)', backgroundColor: 'rgba(253, 126, 20, 0.2)', yAxisID: 'yTemp', tension: 0.1 },
+                { label: t('Gravity (°P)'), data: gravities, borderColor: 'rgb(13, 110, 253)', backgroundColor: 'rgba(13, 110, 253, 0.2)', yAxisID: 'yGravity', tension: 0.1 },
+            ]
+        };
+    }, [batch, t]);
+    
+    const chartOptions: ChartOptions<'line'> = useMemo(() => ({
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+            yTemp: { type: 'linear', display: true, position: 'left', title: { display: true, text: `${t('Temperature')} (°C)` } },
+            yGravity: { type: 'linear', display: true, position: 'right', title: { display: true, text: `${t('Gravity')} (°P)` }, grid: { drawOnChartArea: false } },
+        }
+    }), [t]);
+
+    const timelineItems = useMemo(() => {
+        const itemsByDay: Map<number, {
+            date: Date;
+            plannedSteps: FermentationStep[];
+            plannedAdditions: TankIngredient[];
+            actualEntries: LogEntry[];
+        }> = new Map();
+
+        const cookDate = new Date(`${batch.cookDate}T00:00:00Z`);
+
+        // Process planned steps
+        let cumulativeDays = 0;
+        batch.fermentationLog.expected.steps.forEach(step => {
+            const dayNumber = cumulativeDays;
+            if (!itemsByDay.has(dayNumber)) {
+                itemsByDay.set(dayNumber, { date: addDays(cookDate, dayNumber), plannedSteps: [], plannedAdditions: [], actualEntries: [] });
+            }
+            itemsByDay.get(dayNumber)!.plannedSteps.push(step);
+            cumulativeDays += step.days;
+        });
+
+        // Process planned additions
+        batch.fermentationLog.expected.additions.forEach(addition => {
+            const dayNumber = addition.day;
+            if (!itemsByDay.has(dayNumber)) {
+                itemsByDay.set(dayNumber, { date: addDays(cookDate, dayNumber), plannedSteps: [], plannedAdditions: [], actualEntries: [] });
+            }
+            itemsByDay.get(dayNumber)!.plannedAdditions.push(addition);
+        });
+
+        // Process actual log entries
+        batch.fermentationLog.actual.logEntries.forEach(log => {
+            const logDate = new Date(log.timestamp);
+            const dayNumber = Math.floor((logDate.getTime() - cookDate.getTime()) / (1000 * 3600 * 24));
+            if (!itemsByDay.has(dayNumber)) {
+                itemsByDay.set(dayNumber, { date: addDays(cookDate, dayNumber), plannedSteps: [], plannedAdditions: [], actualEntries: [] });
+            }
+            itemsByDay.get(dayNumber)!.actualEntries.push(log);
+        });
+
+        return Array.from(itemsByDay.entries())
+            .sort(([dayA], [dayB]) => dayA - dayB)
+            .map(([dayNumber, data]) => ({ dayNumber, ...data }));
+
+    }, [batch]);
+    
+    const handleOpenLogModal = (entry?: Partial<LogEntry>) => {
+        setCurrentLogEntry(entry || { timestamp: new Date().toISOString() });
+        setIsLogModalOpen(true);
+    };
+
+    const handleSaveLogEntry = (entryToSave: Omit<LogEntry, 'id'> | LogEntry) => {
+        const existingEntries = batch.fermentationLog.actual.logEntries;
+        let newEntries: LogEntry[];
+
+        if ('id' in entryToSave && entryToSave.id) {
+            newEntries = existingEntries.map(e => e.id === entryToSave.id ? entryToSave : e);
+        } else {
+            const newEntry: LogEntry = { ...(entryToSave as Omit<LogEntry, 'id'>), id: generateUniqueId('log') };
+            newEntries = [...existingEntries, newEntry];
+        }
+
+        newEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        onDeepChange('fermentationLog.actual.logEntries', newEntries);
+        setIsLogModalOpen(false);
+    };
+
+    const handleDeleteLogEntry = (id: string) => {
+        const newEntries = batch.fermentationLog.actual.logEntries.filter(e => e.id !== id);
+        onDeepChange('fermentationLog.actual.logEntries', newEntries);
+    };
+
+    const handleOpenAdditionModal = (plannedAddition: TankIngredient) => {
+        const actualAddition = batch.fermentationLog.actual.additions.find(a => a.id === plannedAddition.id);
+        if (actualAddition) {
+            setCurrentAdditionToConfirm({ planned: plannedAddition, actual: actualAddition });
+            setIsAdditionModalOpen(true);
+        }
+    };
+
+    const handleSaveAdditionConfirmation = (updatedActualAddition: ActualTankIngredient) => {
+        const itemsToUnload = updatedActualAddition.lotAssignments
+            .filter(assign => assign.lotNumber && assign.quantity && assign.quantity > 0)
+            .map(assignment => ({
+                masterItemId: updatedActualAddition.masterItemId,
+                lotNumber: assignment.lotNumber,
+                quantity: assignment.quantity!,
+                locationId: '',
+                expiryDate: '',
+                documentNumber: `BREW-${batch.lot}`,
+                arrivalDate: batch.cookDate,
+            }));
+    
+        // Create a deep copy of the current batch state to modify
+        const newBatch = JSON.parse(JSON.stringify(currentBatch));
+    
+        // Mark as unloaded only if items were actually sent to be unloaded
+        const finalActualAddition = { ...updatedActualAddition, unloaded: itemsToUnload.length > 0 };
+    
+        // Update the additions array in our new batch object
+        const newActualAdditions = newBatch.fermentationLog.actual.additions.map((a: ActualTankIngredient) =>
+            a.id === finalActualAddition.id ? finalActualAddition : a
+        );
+        newBatch.fermentationLog.actual.additions = newActualAdditions;
+    
+        // Perform the unload side-effect
+        if (itemsToUnload.length > 0) {
+            onUnloadItems(itemsToUnload as Omit<WarehouseItem, 'id'>[]);
+            const masterItem = masterItems.find(mi => mi.id === updatedActualAddition.masterItemId);
+            toast.success(`${masterItem?.name} ${t('unloaded successfully')}.`);
+        }
+    
+        // Persist the entire updated batch object
+        onSave(newBatch);
+    
+        setIsAdditionModalOpen(false);
+    };
+
+
+    return (
+        <div className="space-y-6">
+            <LogEntryModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} onSave={handleSaveLogEntry} entryData={currentLogEntry} t={t} />
+            <AdditionConfirmationModal 
+                isOpen={isAdditionModalOpen} 
+                onClose={() => setIsAdditionModalOpen(false)}
+                onSave={handleSaveAdditionConfirmation}
+                data={currentAdditionToConfirm}
+                masterItems={masterItems}
+                warehouseItems={warehouseItems}
+                t={t}
+            />
+            <Card title={t('Fermentation Chart')} icon={<ChartBarIcon className="w-5 h-5"/>}>
+                <div className="h-64"><Line options={chartOptions} data={chartData} /></div>
+            </Card>
+
+            <Card title={t('Fermentation Log')} icon={<ClipboardListIcon className="w-5 h-5"/>}>
+                <div className="flex justify-end mb-4">
+                    <button onClick={() => handleOpenLogModal()} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <PlusCircleIcon className="w-5 h-5"/>
+                        <span>{t('Add Log Entry')}</span>
+                    </button>
+                </div>
+                <div className="space-y-4">
+                    {timelineItems.map(({ dayNumber, date, plannedSteps, plannedAdditions, actualEntries }) => (
+                        <div key={dayNumber} className="bg-color-background/50 p-3 rounded-lg">
+                            <h4 className="font-bold text-color-secondary border-b border-color-border/30 pb-1 mb-2">{t('Day')} {dayNumber} <span className="text-sm font-normal text-gray-500">- {date.toLocaleDateString()}</span></h4>
+                            <div className="space-y-3">
+                                {plannedSteps.map(step => (
+                                    <div key={step.id} className="flex items-center space-x-2 text-sm text-gray-600">
+                                        <ThermometerIcon className="w-5 h-5 text-blue-500 flex-shrink-0"/>
+                                        <span>{t('Planned')}: {step.description} @ {step.temperature}°C ({step.days} {t('days')})</span>
+                                    </div>
+                                ))}
+                                {plannedAdditions.map(add => {
+                                    const item = masterItems.find(mi => mi.id === add.masterItemId);
+                                    const actualAddition = batch.fermentationLog.actual.additions.find(a => a.id === add.id);
+                                    const isUnloaded = actualAddition?.unloaded;
+
+                                    return (
+                                        <div key={add.id}>
+                                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                                                <HopsIcon className="w-5 h-5 text-green-500 flex-shrink-0"/>
+                                                <span>{t('Planned')}: {t('Add')} {add.quantity} {item?.unit} {item?.name}</span>
+                                            </div>
+                                            {isUnloaded ? (
+                                                <div className="pl-7 mt-1 text-xs space-y-0.5">
+                                                    <p className="font-semibold text-green-600 flex items-center gap-1">
+                                                        <CheckCircleIcon className="w-4 h-4" />
+                                                        {t('Confirmed & Unloaded')}
+                                                    </p>
+                                                    {actualAddition?.lotAssignments.map(lot => (
+                                                        <div key={lot.id} className="text-gray-500 pl-1">
+                                                            <span className="font-mono">{lot.lotNumber}</span>: <span className="font-mono">{lot.quantity?.toFixed(2)} {item?.unit}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="pl-7 mt-1">
+                                                    <button
+                                                        onClick={() => handleOpenAdditionModal(add)}
+                                                        className="flex items-center space-x-2 text-sm font-semibold text-color-secondary hover:text-color-accent transition-colors py-1 px-2 rounded-md bg-color-surface/60 hover:bg-color-surface border border-color-border/30"
+                                                    >
+                                                        <CheckCircleIcon className="w-4 h-4" />
+                                                        <span>{t('Confirm Activity')}</span>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                                {actualEntries.map(log => (
+                                    <div key={log.id} className="bg-white/50 p-2 rounded-md">
+                                        <div className="flex justify-between items-start gap-2">
+                                            <div className="flex items-start space-x-2 text-sm flex-grow min-w-0">
+                                                <div className="mt-0.5 flex-shrink-0">
+                                                    {log.type === 'transfer' ? <ArrowRightLeftIcon className="w-5 h-5 text-yellow-500"/> : <ClipboardListIcon className="w-5 h-5 text-purple-500"/>}
+                                                </div>
+                                                <div className="flex-grow">
+                                                    <span className="font-semibold">{new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    {log.type === 'measurement' ? (
+                                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mt-1 text-gray-600">
+                                                            {log.temperature !== undefined && <span>{t('Temp.')}: <strong className="font-mono text-color-text">{log.temperature}°C</strong></span>}
+                                                            {log.gravity !== undefined && <span>{t('Gravity')}: <strong className="font-mono text-color-text">{log.gravity}°P</strong></span>}
+                                                            {log.ph !== undefined && <span>{t('pH')}: <strong className="font-mono text-color-text">{log.ph}</strong></span>}
+                                                            {log.pressure !== undefined && <span>{t('Pressure')}: <strong className="font-mono text-color-text">{log.pressure} Bar</strong></span>}
+                                                        </div>
+                                                    ) : null}
+                                                    {log.notes && (
+                                                        <p className="text-xs text-gray-600 mt-1 italic">
+                                                            {log.notes}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center space-x-1 flex-shrink-0">
+                                                {log.type !== 'transfer' && (
+                                                    <>
+                                                        <button onClick={() => handleOpenLogModal(log)} className="p-1 text-gray-400 hover:text-color-accent rounded-full hover:bg-color-accent/10" aria-label={t('Edit Log Entry')}><PencilIcon className="w-4 h-4"/></button>
+                                                        <button onClick={() => handleDeleteLogEntry(log.id)} className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-100" aria-label={t('Delete Log Entry')}><TrashIcon className="w-4 h-4"/></button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </Card>
         </div>
     );
 };

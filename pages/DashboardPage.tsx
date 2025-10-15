@@ -1,8 +1,14 @@
+
 import React, { useMemo } from 'react';
 import Card from '../components/ui/Card';
 import { useTranslation } from '../hooks/useTranslation';
-import { BrewSheet, WarehouseItem, MasterItem, Page } from '../types';
-import { BeakerIcon, CalendarIcon, ArchiveIcon, ArrowRightIcon, HopsIcon, SnowflakeIcon, BottleIcon, AlertTriangleIcon } from '../components/Icons';
+import { BrewSheet, WarehouseItem, MasterItem, Page, Recipe, Location } from '../types';
+import { BeakerIcon, CalendarIcon, ArchiveIcon, ArrowRightIcon, HopsIcon, SnowflakeIcon, BottleIcon, AlertTriangleIcon, ChartBarIcon } from '../components/Icons';
+import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend, ChartOptions, ChartData } from 'chart.js';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
 
 interface StatCardProps {
     icon: React.ReactNode;
@@ -76,7 +82,7 @@ const ActivityAlerts: React.FC<{
                 if (isDateRelevant(stepDate)) {
                     relevantAlerts.push({
                         batch,
-                        task: step.description,
+                        task: `${step.description} @ ${step.temperature}°C`,
                         date: stepDate,
                         type: 'step'
                     });
@@ -92,7 +98,7 @@ const ActivityAlerts: React.FC<{
                      if (isDateRelevant(additionDate)) {
                         relevantAlerts.push({
                             batch,
-                            task: `${t('Dry Hop')}: ${masterItem.name}`,
+                            task: `${t('Dry Hop')}: ${addition.quantity} ${masterItem.unit} ${masterItem.name}`,
                             date: additionDate,
                             type: 'hop'
                         });
@@ -184,47 +190,164 @@ const ActivityAlerts: React.FC<{
     );
 };
 
-const LowStockAlerts: React.FC<{
-    lowStockItems: (MasterItem & { currentStock: number })[];
-    onNavigate: (page: Page) => void;
+const statusColors: { [key in BrewSheet['status']]: string } = {
+    'Planned': 'border-blue-500',
+    'In Progress': 'border-yellow-500',
+    'Fermenting': 'border-purple-500',
+    'Packaged': 'border-green-500',
+    'Completed': 'border-gray-500',
+};
+
+const TankStatusOverview: React.FC<{
+    batches: BrewSheet[];
+    recipes: Recipe[];
+    locations: Location[];
+    onNavigate: (page: { page: Page, id: string }) => void;
     t: (key: string) => string;
-}> = ({ lowStockItems, onNavigate, t }) => {
+}> = ({ batches, recipes, locations, onNavigate, t }) => {
+    const tanks = useMemo(() => locations.filter(l => l.type === 'Tank').sort((a,b) => a.name.localeCompare(b.name, undefined, { numeric: true })), [locations]);
+
+    const tankOccupancy = useMemo(() => {
+        const occupancyMap = new Map<string, BrewSheet>();
+        const activeBatches = batches.filter(b => ['In Progress', 'Fermenting'].includes(b.status));
+        activeBatches.forEach(batch => {
+            occupancyMap.set(batch.fermenterId, batch);
+        });
+        return occupancyMap;
+    }, [batches]);
+
     return (
         <Card className="flex-1 flex flex-col" bodyClassName="flex flex-col">
-            <h2 className="text-xl text-color-accent font-semibold mb-4">{t('Low Stock Alerts')}</h2>
-            {lowStockItems.length === 0 ? (
-                 <div className="flex-1 flex items-center justify-center text-center">
-                    <div>
-                        <ArchiveIcon className="w-12 h-12 mx-auto text-gray-600" />
-                        <p className="mt-2 text-gray-500">{t('All items are well-stocked.')}</p>
-                    </div>
-                </div>
-            ) : (
-                 <ul className="space-y-3 overflow-y-auto pr-2 -mr-2">
-                    {lowStockItems.map(item => (
-                        <li key={item.id} className="w-full flex items-center space-x-3 p-3 bg-color-background rounded-md">
-                            <div className="flex-shrink-0"><AlertTriangleIcon className="w-5 h-5 text-red-400" /></div>
-                            <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-color-text truncate">{item.name}</p>
-                                <p className="text-sm text-gray-500 truncate">{t('Stock')}: {item.currentStock.toFixed(2)} / {item.reorderPoint} {item.unit}</p>
+            <h2 className="text-xl text-color-accent font-semibold mb-4">{t('Tank Status')}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pr-2 -mr-2">
+                {tanks.map(tank => {
+                    const batch = tankOccupancy.get(tank.id);
+
+                    if (!batch) {
+                        return (
+                            <div key={tank.id} className="p-3 bg-color-background rounded-lg border border-dashed border-color-border">
+                                <h3 className="font-bold text-gray-600">{tank.name}</h3>
+                                <p className="text-sm text-gray-400">{t('Empty')}</p>
                             </div>
-                        </li>
-                    ))}
-                </ul>
-            )}
+                        );
+                    }
+                    
+                    const recipe = recipes.find(r => r.id === batch.recipeId);
+                    const cookDate = new Date(`${batch.cookDate}T00:00:00`);
+                    const today = new Date();
+                    const dayInFerm = Math.floor((today.getTime() - cookDate.getTime()) / (1000 * 3600 * 24));
+                    
+                    let currentStep = null;
+                    let dayInStep = 0;
+                    let cumulativeDays = 0;
+                    if(recipe) {
+                        for(const step of recipe.fermentationSteps) {
+                            if (dayInFerm >= cumulativeDays && dayInFerm < cumulativeDays + step.days) {
+                                currentStep = step;
+                                dayInStep = dayInFerm - cumulativeDays + 1;
+                                break;
+                            }
+                            cumulativeDays += step.days;
+                        }
+                    }
+                    const progress = currentStep ? (dayInStep / currentStep.days) * 100 : 0;
+
+                    return (
+                        <button key={tank.id} onClick={() => onNavigate({ page: Page.Batches, id: batch.id })} className={`p-3 bg-color-surface rounded-lg shadow-md border-l-4 ${statusColors[batch.status]} text-left`}>
+                            <h3 className="font-bold text-color-text truncate">{tank.name}</h3>
+                            <p className="text-sm font-semibold text-color-accent truncate">{batch.beerName}</p>
+                            <p className="text-xs text-gray-500 truncate">{t('Lot')}: {batch.lot}</p>
+                            {currentStep && (
+                                <div className="mt-2">
+                                    <p className="text-xs text-gray-500 truncate">{currentStep.description}</p>
+                                    <p className="text-xs font-semibold">{t('Day')} {dayInStep} {t('of')} {currentStep.days}</p>
+                                    <div className="w-full bg-color-border rounded-full h-1.5 mt-1">
+                                        <div className="bg-color-accent h-1.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                                    </div>
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
         </Card>
-    )
-}
+    );
+};
+
+const ProductionVolumeChart: React.FC<{
+    batches: BrewSheet[];
+    masterItems: MasterItem[];
+    t: (key: string) => string;
+}> = ({ batches, masterItems, t }) => {
+    
+    const chartData = useMemo<ChartData<'bar'>>(() => {
+        const months: string[] = [];
+        const data: number[] = [];
+        const today = new Date();
+
+        for(let i=5; i >= 0; i--) {
+            const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+            months.push(date.toLocaleString('default', { month: 'short' }));
+            data.push(0);
+        }
+        
+        const completedBatches = batches.filter(b => (b.status === 'Completed' || b.status === 'Packaged') && b.packagingLog.packagingDate);
+
+        completedBatches.forEach(batch => {
+            const packagingDate = new Date(batch.packagingLog.packagingDate!);
+            const monthDiff = (today.getFullYear() - packagingDate.getFullYear()) * 12 + (today.getMonth() - packagingDate.getMonth());
+            
+            if (monthDiff >= 0 && monthDiff < 6) {
+                const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((sum, packagedItem) => {
+                    const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
+                    const volume = masterItem?.containerVolumeL || 0;
+                    return sum + ((packagedItem.quantityGood || 0) * volume);
+                }, 0);
+                
+                const index = 5 - monthDiff;
+                data[index] += totalPackagedLiters;
+            }
+        });
+
+        return {
+            labels: months,
+            datasets: [{
+                label: t('Volume (L)'),
+                data: data,
+                backgroundColor: 'rgba(13, 110, 253, 0.6)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1
+            }]
+        };
+    }, [batches, masterItems, t]);
+
+    const chartOptions: ChartOptions<'bar'> = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+    };
+
+    return (
+        <Card title={t('Monthly Production Volume')} icon={<ChartBarIcon className="w-5 h-5"/>}>
+            <div className="h-64">
+                <Bar data={chartData} options={chartOptions} />
+            </div>
+        </Card>
+    );
+};
 
 
 interface DashboardPageProps {
     batches: BrewSheet[];
     warehouseItems: WarehouseItem[];
     masterItems: MasterItem[];
+    recipes: Recipe[];
+    locations: Location[];
     onNavigate: (page: Page | { page: Page; id: string }) => void;
 }
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ batches, warehouseItems, masterItems, onNavigate }) => {
+const DashboardPage: React.FC<DashboardPageProps> = ({ batches, warehouseItems, masterItems, recipes, locations, onNavigate }) => {
     const { t } = useTranslation();
 
     const stats = useMemo(() => {
@@ -243,57 +366,47 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ batches, warehouseItems, 
                 return mi.currentStock < mi.reorderPoint;
             });
         
-        const completedBatches = batches.filter(b => b.status === 'Completed' && b.packagingLog.summaryExpectedLiters && b.packagingLog.summaryExpectedLiters > 0);
-        const totalYield = completedBatches.reduce((sum, batch) => {
-            const totalPackagedLiters = batch.packagingLog.packagedItems.reduce((s, packagedItem) => {
-                const masterItem = masterItems.find(mi => mi.id === packagedItem.masterItemId);
-                const volume = masterItem?.containerVolumeL || 0;
-                return s + ((packagedItem.quantityGood || 0) * volume);
-            }, 0);
-            const expectedLiters = batch.packagingLog.summaryExpectedLiters || 1; // Avoid division by zero
-            return sum + (totalPackagedLiters / expectedLiters);
-        }, 0);
-        const averageYield = completedBatches.length > 0 ? (totalYield / completedBatches.length) * 100 : 0;
-        
-        return { inProgress, planned, lowStockItems, averageYield };
+        return { inProgress, planned, lowStockItems };
     }, [batches, warehouseItems, masterItems]);
 
     return (
         <div className="h-full flex flex-col">
-            <h1 className="text-3xl font-bold text-color-text mb-6 flex-shrink-0">{t('Dashboard')}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-color-text mb-4 flex-shrink-0">{t('Dashboard')}</h1>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
-                <StatCard 
-                    icon={<BeakerIcon className="w-6 h-6 text-color-secondary" />}
-                    title={t('Batches in Progress')}
-                    value={stats.inProgress}
-                    actionText={t('View Batches')}
-                    onActionClick={() => onNavigate(Page.Batches)}
-                />
-                 <StatCard 
-                    icon={<CalendarIcon className="w-6 h-6 text-color-accent" />}
-                    title={t('Planned Batches')}
-                    value={stats.planned}
-                    actionText={t('View Calendar')}
-                    onActionClick={() => onNavigate(Page.Calendar)}
-                />
-                 <StatCard 
-                    icon={<ArchiveIcon className="w-6 h-6 text-red-400" />}
-                    title={t('Low Stock Items')}
-                    value={stats.lowStockItems.length}
-                    actionText={t('View Warehouse')}
-                    onActionClick={() => onNavigate(Page.Warehouse)}
-                />
-                 <StatCard 
-                    icon={<BottleIcon className="w-6 h-6 text-green-400" />}
-                    title={t('Average Packaging Yield')}
-                    value={`${stats.averageYield.toFixed(1)}%`}
-                />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-                <ActivityAlerts batches={batches} masterItems={masterItems} onNavigate={onNavigate} t={t} />
-                <LowStockAlerts lowStockItems={stats.lowStockItems} onNavigate={onNavigate} t={t} />
+            <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                    <StatCard 
+                        icon={<BeakerIcon className="w-6 h-6 text-color-secondary" />}
+                        title={t('Batches in Progress')}
+                        value={stats.inProgress}
+                        actionText={t('View Batches')}
+                        onActionClick={() => onNavigate(Page.Batches)}
+                    />
+                     <StatCard 
+                        icon={<CalendarIcon className="w-6 h-6 text-color-accent" />}
+                        title={t('Planned Batches')}
+                        value={stats.planned}
+                        actionText={t('View Calendar')}
+                        onActionClick={() => onNavigate(Page.Calendar)}
+                    />
+                     <StatCard 
+                        icon={<ArchiveIcon className="w-6 h-6 text-red-400" />}
+                        title={t('Low Stock Items')}
+                        value={stats.lowStockItems.length}
+                        actionText={t('View Warehouse')}
+                        onActionClick={() => onNavigate(Page.Warehouse)}
+                    />
+                    <ProductionVolumeChart batches={batches} masterItems={masterItems} t={t} />
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2">
+                        <TankStatusOverview batches={batches} recipes={recipes} locations={locations} onNavigate={onNavigate} t={t} />
+                    </div>
+                    <div className="flex flex-col gap-6">
+                        <ActivityAlerts batches={batches} masterItems={masterItems} onNavigate={onNavigate} t={t} />
+                    </div>
+                </div>
             </div>
         </div>
     )

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, ChartData, ChartOptions } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
@@ -499,7 +500,7 @@ const AnalysisPage: React.FC<AnalysisPageProps> = ({ batches, recipes, masterIte
     const { t } = useTranslation();
     return (
         <div className="h-full flex flex-col">
-            <h1 className="text-3xl font-bold text-color-text mb-6 flex-shrink-0">{t('Analysis')}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-color-text mb-4 flex-shrink-0">{t('Analysis')}</h1>
             
             <div className="flex-1 overflow-y-auto pr-2 space-y-6">
                 <BatchComparison recipes={recipes} batches={batches} masterItems={masterItems} t={t} />

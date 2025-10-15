@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Supplier } from '../types';
 import EmptyState from '../components/ui/EmptyState';
 import { PlusCircleIcon, TrashIcon, TruckIcon } from '../components/Icons';
@@ -145,6 +145,15 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ suppliers, onSaveSupplier
     const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [supplierToDelete, setSupplierToDelete] = useState<Supplier | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredSuppliers = useMemo(() => {
+        if (!searchTerm) return suppliers;
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return suppliers.filter(s =>
+            s.name.toLowerCase().includes(lowercasedTerm)
+        );
+    }, [suppliers, searchTerm]);
 
     const handleNewSupplier = () => {
         setSelectedSupplier(null);
@@ -184,16 +193,25 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ suppliers, onSaveSupplier
                 title={t('Delete Supplier')}
                 message={`${t('Are you sure you want to delete supplier')} ${supplierToDelete?.name}? ${t('This action cannot be undone.')}`}
             />
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Suppliers')}</h1>
-                <button onClick={handleNewSupplier} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                    <PlusCircleIcon className="w-6 h-6" />
-                    <span>{t('New Supplier')}</span>
-                </button>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 flex-shrink-0">
+                <h1 className="text-3xl font-bold text-color-text">{t('Suppliers')}</h1>
+                <div className="flex items-center gap-4 w-full md:w-auto md:flex-1 md:justify-end">
+                    <div className="flex-grow max-w-sm">
+                        <Input
+                            placeholder={t('Search by name...')}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button onClick={handleNewSupplier} className="flex-shrink-0 flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        <PlusCircleIcon className="w-6 h-6" />
+                        <span>{t('New Supplier')}</span>
+                    </button>
+                </div>
             </div>
-            {suppliers.length > 0 ? (
+            {filteredSuppliers.length > 0 ? (
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                    {suppliers.map(sup => (
+                    {filteredSuppliers.map(sup => (
                         <SupplierCard 
                             key={sup.id} 
                             supplier={sup} 
@@ -207,12 +225,12 @@ const SuppliersPage: React.FC<SuppliersPageProps> = ({ suppliers, onSaveSupplier
                 <div className="flex-1 flex items-center justify-center">
                     <EmptyState 
                         icon={<TruckIcon className="w-12 h-12"/>}
-                        title={t('No suppliers found')}
-                        message={t('Add your first supplier to get started.')}
-                        action={{
+                        title={suppliers.length === 0 ? t('No suppliers found') : t('No suppliers match your search.')}
+                        message={suppliers.length === 0 ? t('Add your first supplier to get started.') : t('Try a different search term.')}
+                        action={suppliers.length === 0 ? {
                             text: t('Create New Supplier'),
                             onClick: handleNewSupplier
-                        }}
+                        } : undefined}
                     />
                 </div>
             )}

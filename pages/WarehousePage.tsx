@@ -1,30 +1,103 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { WarehouseItem, MasterItem, Location, Category } from '../types';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import { useTranslation } from '../hooks/useTranslation';
 import EmptyState from '../components/ui/EmptyState';
-import { ArchiveIcon, PlusCircleIcon, ArrowRightIcon, FileExportIcon, ArrowRightLeftIcon } from '../components/Icons';
+import { ArchiveIcon, PlusCircleIcon, ArrowRightIcon, FileExportIcon, ArrowRightLeftIcon, CloudUploadIcon, DownloadIcon, ChevronDownIcon } from '../components/Icons';
 import ExportStockModal, { ExportFilters } from '../components/ExportStockModal';
 import WarehouseMoveModal from '../components/WarehouseMoveModal';
+import { useToast } from '../hooks/useToast';
 
 interface WarehousePageProps {
   warehouseItems: WarehouseItem[];
   masterItems: MasterItem[];
   locations: Location[];
   categories: Category[];
-  onLoadItems: () => void;
+  onLoadItems: (items: Omit<WarehouseItem, 'id'>[]) => void;
   onUnloadItems: () => void;
   onMoveItem: (details: { masterItemId: string; lotNumber: string; fromLocationId: string; toLocationId: string; quantity: number; }) => void;
   title: string;
   showLoadButton: boolean;
 }
 
+const ActionsMenu: React.FC<{ 
+    actions: ({ label: string; icon: React.ReactNode; onClick: () => void; } | { isDivider: true })[] 
+}> = ({ actions }) => {
+    const { t } = useTranslation();
+    const [isOpen, setIsOpen] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [wrapperRef]);
+    
+    return (
+        <div className="relative inline-block text-left" ref={wrapperRef}>
+            <div>
+                <button
+                    type="button"
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="inline-flex justify-center w-full rounded-lg shadow-md px-4 py-2 bg-color-accent text-white font-bold hover:bg-orange-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-color-background focus:ring-color-accent"
+                    id="menu-button"
+                    aria-expanded={isOpen}
+                    aria-haspopup="true"
+                >
+                    {t('Actions')}
+                    <ChevronDownIcon className="-mr-1 ml-2 h-5 w-5" aria-hidden="true" />
+                </button>
+            </div>
+
+            {isOpen && (
+                <div
+                    className="origin-top-right absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-color-surface ring-1 ring-black ring-opacity-5 focus:outline-none z-10"
+                    role="menu"
+                    aria-orientation="vertical"
+                    aria-labelledby="menu-button"
+                >
+                    <div className="py-1" role="none">
+                        {actions.map((action, index) => {
+                            if ('isDivider' in action && action.isDivider) {
+                                return <hr key={`divider-${index}`} className="my-1 border-color-border" />;
+                            }
+                            const { label, icon, onClick } = action as { label: string; icon: React.ReactNode; onClick: () => void; };
+                            return (
+                                <button
+                                    key={index}
+                                    onClick={() => {
+                                        onClick();
+                                        setIsOpen(false);
+                                    }}
+                                    className="text-color-text group flex items-center w-full px-4 py-2 text-sm hover:bg-color-background"
+                                    role="menuitem"
+                                >
+                                    <div className="mr-3 h-5 w-5 text-gray-400 group-hover:text-color-accent">{icon}</div>
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const WarehousePage: React.FC<WarehousePageProps> = ({ warehouseItems, masterItems, locations, categories, onLoadItems, onUnloadItems, onMoveItem, title, showLoadButton }) => {
     const { t } = useTranslation();
+    const toast = useToast();
     const [searchTerm, setSearchTerm] = useState('');
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const getCategoryName = (categoryId: string) => {
         const category = categories.find(c => c.id === categoryId);
@@ -41,6 +114,134 @@ const WarehousePage: React.FC<WarehousePageProps> = ({ warehouseItems, masterIte
 
     const getLocationName = (locationId: string) => locations.find(l => l.id === locationId)?.name || 'N/A';
     
+    // --- IMPORT LOGIC ---
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+    
+    const handleDownloadTemplate = () => {
+        const headers = [
+            'Item Name / Nome Articolo',
+            'Lot Number / Numero di Lotto',
+            'Quantity / Quantità',
+            'Location Name / Ubicazione',
+            'Arrival Date / Data Arrivo (YYYY-MM-DD)',
+            'Expiry Date / Data Scadenza (YYYY-MM-DD)',
+            'Document Number / Numero Documento'
+        ];
+        const sampleData = [
+            'Pilsner Malt',
+            'L-2024-001',
+            250,
+            'Raw Materials Warehouse',
+            '2024-01-15',
+            '2025-01-15',
+            'DDT-12345'
+        ];
+        const worksheet = window.XLSX.utils.aoa_to_sheet([headers, sampleData]);
+        const workbook = window.XLSX.utils.book_new();
+        window.XLSX.utils.book_append_sheet(workbook, worksheet, 'Stock Load Template');
+        window.XLSX.writeFile(workbook, 'BrewFlow_Stock_Template.xlsx');
+        toast.success('Template downloaded successfully!');
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        event.target.value = '';
+
+        if (!file.name.match(/\.(xlsx|xls)$/)) {
+            toast.error(t('Invalid file type. Please upload an Excel file.'));
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = window.XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                const json: any[] = window.XLSX.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'yyyy-mm-dd' });
+
+                const itemsToLoad: Omit<WarehouseItem, 'id'>[] = [];
+                let skippedRows = 0;
+                
+                const headerMap: Record<string, string[]> = {
+                    itemName: ['Item Name', 'Nome Articolo'],
+                    lotNumber: ['Lot Number', 'Numero di Lotto'],
+                    quantity: ['Quantity', 'Quantità'],
+                    locationName: ['Location Name', 'Ubicazione'],
+                    arrivalDate: ['Arrival Date', 'Data Arrivo'],
+                    expiryDate: ['Expiry Date', 'Data Scadenza'],
+                    documentNumber: ['Document Number', 'Numero Documento'],
+                };
+                
+                const findHeader = (row: any, keys: string[]): any | undefined => {
+                    for(const key of keys) {
+                        if(row[key] !== undefined) return row[key];
+                    }
+                    return undefined;
+                }
+
+                json.forEach((row, index) => {
+                    const itemName = findHeader(row, headerMap.itemName);
+                    const lotNumber = findHeader(row, headerMap.lotNumber);
+                    const quantity = findHeader(row, headerMap.quantity);
+                    const locationName = findHeader(row, headerMap.locationName);
+                    const arrivalDate = findHeader(row, headerMap.arrivalDate);
+                    const expiryDate = findHeader(row, headerMap.expiryDate);
+                    const documentNumber = findHeader(row, headerMap.documentNumber);
+
+                    const masterItem = masterItems.find(mi => mi.name.toLowerCase() === String(itemName)?.toLowerCase());
+                    const location = locations.find(l => l.name.toLowerCase() === String(locationName)?.toLowerCase());
+                    const numQuantity = parseFloat(quantity);
+                    
+                    if (!masterItem || !location || !lotNumber || isNaN(numQuantity) || numQuantity <= 0 || !arrivalDate) {
+                        console.error(`Skipping row ${index + 2}: Invalid data.`, { row, masterItem, location, lotNumber, numQuantity, arrivalDate });
+                        skippedRows++;
+                        return;
+                    }
+                    
+                    const formatDate = (date: string | Date) => {
+                        if (date instanceof Date) return date.toISOString().split('T')[0];
+                        return date;
+                    }
+
+                    itemsToLoad.push({
+                        masterItemId: masterItem.id,
+                        lotNumber: String(lotNumber),
+                        quantity: numQuantity,
+                        locationId: location.id,
+                        arrivalDate: formatDate(arrivalDate),
+                        expiryDate: expiryDate ? formatDate(expiryDate) : undefined,
+                        documentNumber: documentNumber ? String(documentNumber) : `IMPORT-${new Date().toISOString().split('T')[0]}`,
+                    });
+                });
+
+                if (itemsToLoad.length > 0) {
+                    onLoadItems(itemsToLoad);
+                    let successMessage = `${itemsToLoad.length} ${t('items imported successfully.')}`;
+                    if (skippedRows > 0) {
+                        successMessage += ` ${skippedRows} ${t('rows were skipped due to errors (e.g., item not found, invalid data).')} ${t('Please check the console for details.')}`;
+                        toast.info(successMessage, t('File processed'));
+                    } else {
+                        toast.success(successMessage, t('File processed'));
+                    }
+                } else {
+                    toast.error(`${t('No items found in the file to import.')} ${t('Make sure the columns are named correctly')}.`, t('Error processing file'));
+                }
+
+            } catch (error) {
+                console.error("Error processing Excel file:", error);
+                toast.error(t('Error processing file'), 'Error');
+            }
+        };
+
+        reader.readAsArrayBuffer(file);
+    };
+
     // --- EXPORT LOGIC ---
     const exportToPdf = (data: any[]) => {
         const { jsPDF } = window.jspdf;
@@ -130,6 +331,31 @@ const WarehousePage: React.FC<WarehousePageProps> = ({ warehouseItems, masterIte
         }
     };
 
+    const actions = useMemo(() => {
+        let allActions: ({ label: string; icon: React.ReactNode; onClick: () => void; } | { isDivider: true })[] = [];
+        
+        if (showLoadButton) {
+            allActions.push({ label: t('Load Stock'), icon: <PlusCircleIcon className="w-5 h-5" />, onClick: onLoadItems });
+            allActions.push({ label: t('Import from Excel'), icon: <CloudUploadIcon className="w-5 h-5" />, onClick: handleImportClick });
+        }
+
+        allActions.push({ label: t('Unload Stock'), icon: <ArrowRightIcon className="w-5 h-5 -rotate-45" />, onClick: onUnloadItems });
+        allActions.push({ label: t('Move Stock'), icon: <ArrowRightLeftIcon className="w-5 h-5" />, onClick: () => setIsMoveModalOpen(true) });
+        allActions.push({ isDivider: true });
+        allActions.push({ label: t('Export Stock'), icon: <FileExportIcon className="w-5 h-5" />, onClick: () => setIsExportModalOpen(true) });
+
+        if (showLoadButton) {
+            allActions.push({ label: t('Download Template'), icon: <DownloadIcon className="w-5 h-5" />, onClick: handleDownloadTemplate });
+        }
+
+        return allActions.filter((action, index, arr) => {
+            if ('isDivider' in action) {
+                return index > 0 && index < arr.length - 1 && !('isDivider' in arr[index + 1]);
+            }
+            return true;
+        });
+    }, [t, showLoadButton, onLoadItems, onUnloadItems]);
+
 
     const aggregatedItems = useMemo(() => {
         const itemMap = new Map<string, { masterItem: MasterItem; totalQuantity: number; lots: (WarehouseItem & { locationName: string})[] }>();
@@ -163,6 +389,13 @@ const WarehousePage: React.FC<WarehousePageProps> = ({ warehouseItems, masterIte
 
     return (
         <div className="h-full flex flex-col">
+            <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".xlsx, .xls"
+            />
              <ExportStockModal 
                 isOpen={isExportModalOpen}
                 onClose={() => setIsExportModalOpen(false)}
@@ -181,39 +414,19 @@ const WarehousePage: React.FC<WarehousePageProps> = ({ warehouseItems, masterIte
                 warehouseItems={warehouseItems}
                 locations={locations}
             />
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{title}</h1>
-                <div className="flex space-x-2">
-                    <button onClick={() => setIsExportModalOpen(true)} className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                        <FileExportIcon className="w-5 h-5" />
-                        <span>{t('Export Stock')}</span>
-                    </button>
-                    <button onClick={() => setIsMoveModalOpen(true)} className="flex items-center space-x-2 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                        <ArrowRightLeftIcon className="w-5 h-5" />
-                        <span>{t('Move Stock')}</span>
-                    </button>
-                    <button onClick={onUnloadItems} className="flex items-center space-x-2 bg-color-secondary hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                        <ArrowRightIcon className="w-5 h-5 -rotate-45" />
-                        <span>{t('Unload Stock')}</span>
-                    </button>
-                    {showLoadButton && (
-                         <button onClick={onLoadItems} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                            <PlusCircleIcon className="w-6 h-6" />
-                            <span>{t('Load Stock')}</span>
-                        </button>
-                    )}
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 flex-shrink-0">
+                <h1 className="text-3xl font-bold text-color-text">{title}</h1>
+                <div className="flex items-center gap-4 w-full md:w-auto md:flex-1 md:justify-end">
+                    <div className="flex-grow max-w-sm">
+                        <Input
+                            placeholder={t('Search by item name, category, or lot...')}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <ActionsMenu actions={actions} />
                 </div>
             </div>
-
-             {warehouseItems.length > 0 && (
-                <div className="mb-4">
-                    <Input
-                        placeholder={t('Search by item name, category, or lot...')}
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-            )}
             
             <div className="flex-1 overflow-y-auto pr-2">
                 {aggregatedItems.length > 0 ? (

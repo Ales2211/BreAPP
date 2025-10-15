@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { Customer } from '../types';
 import EmptyState from '../components/ui/EmptyState';
 import { PlusCircleIcon, TrashIcon, UsersIcon } from '../components/Icons';
@@ -112,6 +113,16 @@ const CustomersPage: React.FC<CustomersPageProps> = ({ customers, onSaveCustomer
     const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredCustomers = useMemo(() => {
+        if (!searchTerm) return customers;
+        const lowercasedTerm = searchTerm.toLowerCase();
+        return customers.filter(c =>
+            c.name.toLowerCase().includes(lowercasedTerm) ||
+            (c.email && c.email.toLowerCase().includes(lowercasedTerm))
+        );
+    }, [customers, searchTerm]);
 
     const handleNewCustomer = () => {
         setSelectedCustomer(null);
@@ -151,21 +162,31 @@ const CustomersPage: React.FC<CustomersPageProps> = ({ customers, onSaveCustomer
                 title={t('Delete Customer')}
                 message={`${t('Are you sure you want to delete customer')} ${customerToDelete?.name}? ${t('This action cannot be undone.')}`}
             />
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Customers')}</h1>
-                <button onClick={handleNewCustomer} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
-                    <PlusCircleIcon className="w-6 h-6" />
-                    <span>{t('New Customer')}</span>
-                </button>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4 flex-shrink-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-color-text">{t('Customers')}</h1>
+                <div className="flex items-center gap-2 w-full sm:w-auto sm:flex-1 sm:justify-end">
+                    <div className="flex-grow sm:max-w-xs">
+                        <Input
+                            placeholder={t('Search by name or email...')}
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    <button onClick={handleNewCustomer} className="flex-shrink-0 flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-3 rounded-lg shadow transition-transform transform hover:scale-105 text-sm">
+                        <PlusCircleIcon className="w-5 h-5" />
+                        <span className="hidden sm:inline">{t('New Customer')}</span>
+                    </button>
+                </div>
             </div>
-            {customers.length > 0 ? (
+
+            {filteredCustomers.length > 0 ? (
                 <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                    {customers.map(sup => (
+                    {filteredCustomers.map(cust => (
                         <CustomerCard 
-                            key={sup.id} 
-                            customer={sup} 
-                            onEdit={() => handleEditCustomer(sup)} 
-                            onDelete={() => handleDeleteRequest(sup)}
+                            key={cust.id} 
+                            customer={cust} 
+                            onEdit={() => handleEditCustomer(cust)} 
+                            onDelete={() => handleDeleteRequest(cust)}
                             t={t}
                         />
                     ))}
@@ -174,12 +195,12 @@ const CustomersPage: React.FC<CustomersPageProps> = ({ customers, onSaveCustomer
                 <div className="flex-1 flex items-center justify-center">
                     <EmptyState 
                         icon={<UsersIcon className="w-12 h-12"/>}
-                        title={t('No customers found')}
-                        message={t('Add your first customer to get started.')}
-                        action={{
+                        title={customers.length === 0 ? t('No customers found') : t('No customers match your search.')}
+                        message={customers.length === 0 ? t('Add your first customer to get started.') : t('Try a different search term.')}
+                        action={customers.length === 0 ? {
                             text: t('Create New Customer'),
                             onClick: handleNewCustomer
-                        }}
+                        } : undefined}
                     />
                 </div>
             )}

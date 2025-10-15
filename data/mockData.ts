@@ -9,6 +9,7 @@ export const mockCategories: Category[] = [
   { id: 'cat_spices', name: 'Spices' },
   { id: 'cat_other', name: 'Category_Other' },
   { id: 'cat_packaging', name: 'Category_Packaging' },
+  { id: 'cat_packaging_materials', name: 'Packaging Materials', parentCategoryId: 'cat_packaging' },
   { id: 'cat_fg', name: 'Finished Goods' },
   { id: 'cat_kegs', name: 'Kegs', parentCategoryId: 'cat_fg' },
   { id: 'cat_cans', name: 'Cans', parentCategoryId: 'cat_fg' },
@@ -19,6 +20,7 @@ export const mockSuppliers: Supplier[] = [
     { id: 'sup_1', name: 'Weyermann Malz', email: 'info@weyermann.de' },
     { id: 'sup_2', name: 'Yakima Chief Hops', email: 'sales@yakimachief.com' },
     { id: 'sup_3', name: 'Fermentis', email: 'sales@fermentis.com' },
+    { id: 'sup_4', name: 'Can Supply Co', email: 'sales@cansupply.com' },
 ];
 
 export const mockMasterItems: MasterItem[] = [
@@ -36,6 +38,10 @@ export const mockMasterItems: MasterItem[] = [
   // Finished Goods
   { id: 'item_9', name: 'American IPA 33cl Can', categoryId: 'cat_cans', unit: 'pcs', containerVolumeL: 0.33, salePrice: 2.5 },
   { id: 'item_10', name: 'American IPA 20L Keg', categoryId: 'cat_kegs', unit: 'pcs', containerVolumeL: 20, salePrice: 80 },
+  // Packaging Materials
+  { id: 'item_can_33', name: 'Can 33cl', categoryId: 'cat_packaging_materials', unit: 'pcs', purchaseCost: 0.12, defaultSupplierId: 'sup_4'},
+  { id: 'item_lid_202', name: 'Lid 202', categoryId: 'cat_packaging_materials', unit: 'pcs', purchaseCost: 0.03, defaultSupplierId: 'sup_4'},
+  { id: 'item_keg_cap', name: 'Keg Cap', categoryId: 'cat_packaging_materials', unit: 'pcs', purchaseCost: 0.05, defaultSupplierId: 'sup_4'},
 ];
 
 export const mockLocations: Location[] = [
@@ -51,6 +57,8 @@ export const mockWarehouseItems: WarehouseItem[] = [
     { id: 'wh_2', masterItemId: 'item_5', lotNumber: 'YCH-CIT-001', quantity: 10, locationId: 'loc_1', arrivalDate: '2023-10-01' },
     { id: 'wh_3', masterItemId: 'item_8', lotNumber: 'FER-US05-001', quantity: 1000, locationId: 'loc_1', arrivalDate: '2023-10-01' },
     { id: 'wh_4', masterItemId: 'item_9', lotNumber: '24001', quantity: 500, locationId: 'loc_2', arrivalDate: '2024-01-15' },
+    { id: 'wh_5', masterItemId: 'item_can_33', lotNumber: 'CAN-001', quantity: 5000, locationId: 'loc_1', arrivalDate: '2023-10-01' },
+    { id: 'wh_6', masterItemId: 'item_lid_202', lotNumber: 'LID-001', quantity: 5000, locationId: 'loc_1', arrivalDate: '2023-10-01' },
 ];
 
 export const mockWarehouseMovements: WarehouseMovement[] = [
@@ -64,6 +72,7 @@ export const mockRecipes: Recipe[] = [
         id: 'recipe_1',
         name: 'American IPA',
         style: 'IPA',
+        version: '1.0',
         shelfLifeDays: 180,
         qualityControlSpec: {
             og: { target: 14.5, min: 14.2, max: 14.8 },
@@ -86,7 +95,6 @@ export const mockRecipes: Recipe[] = [
             { id: 'ti_1', masterItemId: 'item_8', quantity: 500, day: 0 },
             { id: 'ti_2', masterItemId: 'item_7', quantity: 3, day: 3 },
         ],
-        packagingIngredients: [],
         mashSteps: [
             { id: 'ms_1', type: 'Infusion', temperature: 65, duration: 60 },
         ],
@@ -96,8 +104,23 @@ export const mockRecipes: Recipe[] = [
             { id: 'fs_3', description: 'Crash Cool', temperature: 2, pressure: 1.0, days: 3 },
         ],
         packagedItems: [
-            { id: 'pi_1', masterItemId: 'item_9', packagingSplit: 50 },
-            { id: 'pi_2', masterItemId: 'item_10', packagingSplit: 50 },
+            { 
+                id: 'pi_1', 
+                masterItemId: 'item_9', 
+                packagingSplit: 50,
+                packagingIngredients: [
+                    { id: 'pkg_ing_1', masterItemId: 'item_can_33', quantity: 1364 },
+                    { id: 'pkg_ing_2', masterItemId: 'item_lid_202', quantity: 1364 },
+                ],
+            },
+            { 
+                id: 'pi_2', 
+                masterItemId: 'item_10', 
+                packagingSplit: 50,
+                packagingIngredients: [
+                     { id: 'pkg_ing_3', masterItemId: 'item_keg_cap', quantity: 23 },
+                ],
+            },
         ],
         processParameters: {
             mashWaterMainsL: 700, mashWaterMainsMicroSiemens: 400,
@@ -110,6 +133,8 @@ export const mockRecipes: Recipe[] = [
             postBoilLiters: 1050, postBoilPlato: 14.5, postBoilPh: 5.1,
             boilDuration: 60, whirlpoolDuration: 10, whirlpoolRestDuration: 20, coolingDuration: 30,
             packagingYield: 90,
+            boilWaterAdditionL: 0,
+            boilWaterAdditionNotes: '',
         },
         additionalCosts: { other: 50 },
         notes: 'Classic West Coast IPA.'
@@ -179,6 +204,8 @@ export const generateBrewSheetFromRecipe = (recipe: Recipe, cookDate: string, fe
                 whirlpoolDuration: recipe.processParameters.whirlpoolDuration,
                 whirlpoolRestDuration: recipe.processParameters.whirlpoolRestDuration,
                 coolingDuration: recipe.processParameters.coolingDuration,
+                boilWaterAdditionL: recipe.processParameters.boilWaterAdditionL,
+                boilWaterAdditionNotes: recipe.processParameters.boilWaterAdditionNotes,
             },
             actual: {
                 ingredients: recipe.boilWhirlpoolIngredients.map(ing => ({ id: ing.id, masterItemId: ing.masterItemId, lotAssignments: [] })),
@@ -252,6 +279,7 @@ export const mockCustomerPriceLists: CustomerPriceList[] = [
         customerId: 'cust_1',
         globalDiscountPercent: 5,
         itemDiscounts: [],
+        categoryDiscounts: [],
     }
 ];
 

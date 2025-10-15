@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
+// FIX: All types are now correctly imported from the fixed `types.ts` file.
 import {
   Page, Recipe, BrewSheet, MasterItem, WarehouseItem, Category, Location, Supplier, Customer, Order,
-  BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument, WarehouseMovement
+  BatchNumberingSettings, AdministrationSettings, CustomerPriceList, TransportDocument, WarehouseMovement, LogEntry
 } from './types';
 import { Sidebar } from './components/Sidebar';
 import { MenuIcon } from './components/Icons';
@@ -100,7 +102,6 @@ const App: React.FC = () => {
   const handleSaveBatch = (batch: BrewSheet) => {
     setBatches(prev => prev.map(b => b.id === batch.id ? batch : b));
     toast.success('Batch saved successfully!');
-    goBack();
   };
   const handleCreateBatch = (recipeId: string, details: { cookDate: string; fermenterId: string; }) => {
     const recipe = recipes.find(r => r.id === recipeId);
@@ -112,55 +113,60 @@ const App: React.FC = () => {
   };
   const handleCreateLinkedBatch = (parentBatchId: string, cookDate: string, fermenterIdOverride?: string) => {
     setBatches(prevBatches => {
-        const parentBatch = prevBatches.find(b => b.id === parentBatchId);
-        const recipe = recipes.find(r => r.id === parentBatch?.recipeId);
-
-        if (!parentBatch || !recipe) {
-            toast.error("Could not find parent batch or recipe to create a linked batch.");
+        // Find the batch we clicked on. This could be the mother or another turn.
+        const directParentBatch = prevBatches.find(b => b.id === parentBatchId);
+        if (!directParentBatch) {
+            toast.error("Could not find parent batch to create a linked batch.");
             return prevBatches;
         }
 
-        const fermenterToUse = fermenterIdOverride || parentBatch.fermenterId;
+        // Find the ultimate "mother" batch (the root of the tree)
+        let motherBatch = directParentBatch;
+        while (motherBatch.linkedBatchId) {
+            const nextParent = prevBatches.find(b => b.id === motherBatch.linkedBatchId);
+            if (!nextParent) break;
+            motherBatch = nextParent;
+        }
 
-        // Use prevBatches to generate the new turn correctly, passing it to the generator.
-        const newTurn = generateBrewSheetFromRecipe(recipe, cookDate, fermenterToUse, prevBatches);
+        const recipe = recipes.find(r => r.id === motherBatch.recipeId);
+        if (!recipe) {
+            toast.error("Could not find recipe to create a linked batch.");
+            return prevBatches;
+        }
 
-        // Link it to the parent
-        newTurn.linkedBatchId = parentBatch.id;
-
-        // Clear logs that are managed by the parent
+        // This function will correctly assign a new progressive cookNumber and a temporary lot
+        const newTurn = generateBrewSheetFromRecipe(recipe, cookDate, fermenterIdOverride || motherBatch.fermenterId, prevBatches);
+        
+        // Link the new turn to the mother batch
+        newTurn.linkedBatchId = motherBatch.id;
+        
+        // Clear logs that are managed by the mother
         newTurn.fermentationLog = { expected: { steps: [], additions: [] }, actual: { additions: [], logEntries: [] } };
         newTurn.packagingLog = { packagedItems: [] };
         
-        // --- New Lot Logic ---
-        let updatedParentBatch: BrewSheet | null = null;
-        let baseLot = parentBatch.lot;
-        const originalParentLot = parentBatch.lot;
+        // --- Multi-Turn Lot Logic ---
+        const baseLot = motherBatch.lot.split('/')[0];
+        const isFirstTurnBeingAdded = !prevBatches.some(b => b.linkedBatchId === motherBatch.id) && !motherBatch.lot.includes('/');
         
-        if (!parentBatch.lot.includes('/')) {
-            // This is the first time we are adding a turn.
-            // We need to update the parent batch's lot as well.
-            baseLot = parentBatch.lot; // e.g., '24001'
-            // Create a new object for the parent, don't mutate.
-            updatedParentBatch = {
-                ...parentBatch,
-                lot: `${baseLot}/A`
-            };
-        } else {
-            baseLot = parentBatch.lot.split('/')[0];
-        }
-        
-        const childCount = prevBatches.filter(b => b.linkedBatchId === parentBatch.id).length;
-        const nextLetter = String.fromCharCode('A'.charCodeAt(0) + 1 + childCount);
-        newTurn.lot = `${baseLot}/${nextLetter}`;
+        let updatedMotherBatch: BrewSheet | null = null;
 
-        let finalBatches = [...prevBatches, newTurn];
-        if (updatedParentBatch) {
-            // If it was the first turn, we also need to update the parent in the state.
-            finalBatches = finalBatches.map(b => b.id === parentBatch.id ? updatedParentBatch! : b);
+        if (isFirstTurnBeingAdded) {
+            // This is the first turn being added. The mother becomes /A, new child becomes /B.
+            updatedMotherBatch = { ...motherBatch, lot: `${baseLot}/A` };
+            newTurn.lot = `${baseLot}/B`;
+        } else {
+            // Subsequent turn. Find all turns (including mother if suffixed) to calculate the next letter.
+            const existingTurns = prevBatches.filter(b => b.id === motherBatch.id || b.linkedBatchId === motherBatch.id);
+            const nextLetter = String.fromCharCode('A'.charCodeAt(0) + existingTurns.length);
+            newTurn.lot = `${baseLot}/${nextLetter}`;
         }
         
-        toast.success(`Linked batch ${newTurn.lot} created for ${updatedParentBatch?.lot || originalParentLot}.`);
+        let finalBatches = [...prevBatches, newTurn];
+        if (updatedMotherBatch) {
+            finalBatches = finalBatches.map(b => b.id === motherBatch.id ? updatedMotherBatch! : b);
+        }
+        
+        toast.success(`${t('Linked batch')} ${newTurn.lot} ${t('created and linked to mother lot')} ${baseLot}.`);
         return finalBatches;
     });
   };
@@ -173,6 +179,50 @@ const App: React.FC = () => {
     setBatches(prev => prev.map(b => b.id === batchId ? { ...b, ...updates } : b));
     toast.success(t('Batch updated successfully!'));
   };
+
+    const handleTransferBatch = (batchId: string, newFermenterId: string, transferDate: string) => {
+        setBatches(prev => {
+            const batchIndex = prev.findIndex(b => b.id === batchId);
+            if (batchIndex === -1) {
+                toast.error(t('Batch not found for transfer.'));
+                return prev;
+            }
+
+            const batchToUpdate = { ...prev[batchIndex] };
+            const oldFermenterId = batchToUpdate.fermenterId;
+
+            const transferLogEntry: LogEntry = {
+                id: `log_transfer_${Date.now()}`,
+                timestamp: new Date(transferDate).toISOString(),
+                type: 'transfer',
+                notes: `${t('Transferred from')} ${locations.find(l=>l.id===oldFermenterId)?.name} ${t('to')} ${locations.find(l=>l.id===newFermenterId)?.name}`,
+                details: {
+                    fromTankId: oldFermenterId,
+                    toTankId: newFermenterId,
+                }
+            };
+            
+            const updatedLogs = [
+                ...batchToUpdate.fermentationLog.actual.logEntries,
+                transferLogEntry
+            ].sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+            batchToUpdate.fermentationLog = {
+                ...batchToUpdate.fermentationLog,
+                actual: {
+                    ...batchToUpdate.fermentationLog.actual,
+                    logEntries: updatedLogs,
+                }
+            };
+            batchToUpdate.fermenterId = newFermenterId;
+
+            const updatedBatches = [...prev];
+            updatedBatches[batchIndex] = batchToUpdate;
+
+            toast.success(t('Batch transferred successfully!'));
+            return updatedBatches;
+        });
+    };
 
   // Recipes
   const handleSaveRecipe = (recipeData: Recipe | Omit<Recipe, 'id'>) => {
@@ -222,6 +272,10 @@ const App: React.FC = () => {
   const handleDeleteMasterItem = (itemId: string) => {
     setMasterItems(prev => prev.filter(i => i.id !== itemId));
     toast.success('Item deleted!');
+  };
+  const handleSaveMultipleMasterItems = (itemsData: Omit<MasterItem, 'id'>[]) => {
+      const newItems = itemsData.map(item => ({ ...item, id: `item_${Date.now()}_${Math.random()}` }));
+      setMasterItems(prev => [...prev, ...newItems]);
   };
 
   // Warehouse
@@ -287,8 +341,13 @@ const App: React.FC = () => {
     
     setWarehouseItems(finalItems);
     setWarehouseMovements(prev => [...prev, ...newMovements]);
-    toast.success(`${itemsToUnload.length} type(s) of items unloaded from warehouse.`);
-    goBack();
+    
+    // Only navigate back and show generic toast for general warehouse unload.
+    // Brew sheet unloads have their own specific toasts and should not navigate.
+    if (type === 'unload') {
+        toast.success(`${itemsToUnload.length} type(s) of items unloaded from warehouse.`);
+        goBack();
+    }
 };
 
 const handleMoveItem = (details: { masterItemId: string; lotNumber: string; fromLocationId: string; toLocationId: string; quantity: number; }) => {
@@ -486,7 +545,7 @@ const handleMoveItem = (details: { masterItemId: string; lotNumber: string; from
         switch (currentPage) {
             case Page.Batches:
                 const batch = batches.find(b => b.id === selectedId);
-                return batch ? <BrewSheetPage batch={batch} allBatches={batches} onNavigate={handleNavigate} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations} onBack={goBack} onSave={handleSaveBatch} onUnloadItems={(items) => handleUnloadItems(items, 'brew_unload')} onLoadFinishedGoods={handleLoadFinishedGoods} /> : <p>Batch not found</p>;
+                return batch ? <BrewSheetPage batch={batch} allBatches={batches} onNavigate={handleNavigate} recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} categories={categories} locations={locations} onBack={goBack} onSave={handleSaveBatch} onUnloadItems={(items) => handleUnloadItems(items, 'brew_unload')} onLoadFinishedGoods={handleLoadFinishedGoods} onTransferBatch={handleTransferBatch} /> : <p>Batch not found</p>;
             case Page.Orders:
                  const order = orders.find(o => o.id === selectedId);
                  return <OrderFormPage order={order} customers={customers} masterItems={masterItems} categories={categories} onSave={handleSaveOrder} onBack={goBack} />;
@@ -494,13 +553,13 @@ const handleMoveItem = (details: { masterItemId: string; lotNumber: string; from
     }
 
     switch (currentPage) {
-        case Page.Dashboard: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
-        case Page.Batches: return <BatchesListPage batches={batches} recipes={recipes} locations={locations} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} onCreateBatch={handleCreateBatch} onDeleteBatch={handleDeleteBatch} onCreateLinkedBatch={handleCreateLinkedBatch} onUpdateBatchDetails={handleUpdateBatchDetails} />;
+        case Page.Dashboard: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} recipes={recipes} locations={locations} onNavigate={handleNavigate} />;
+        case Page.Batches: return <BatchesListPage batches={batches} recipes={recipes} locations={locations} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} onCreateBatch={handleCreateBatch} onDeleteBatch={handleDeleteBatch} onCreateLinkedBatch={handleCreateLinkedBatch} onUpdateBatchDetails={handleUpdateBatchDetails} onTransferBatch={handleTransferBatch} />;
         case Page.Recipes: return <RecipesPage recipes={recipes} masterItems={masterItems} onNewRecipe={() => openForm(Page.Recipes, 'new')} onEditRecipe={(recipe) => openForm(Page.Recipes, 'edit', recipe.id)} onDeleteRecipe={handleDeleteRecipe} onDuplicateRecipe={handleDuplicateRecipe} />;
-        case Page.Calendar: return <CalendarPage batches={batches} recipes={recipes} locations={locations} masterItems={masterItems} categories={categories} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} />;
+        case Page.Calendar: return <CalendarPage batches={batches} recipes={recipes} locations={locations} masterItems={masterItems} categories={categories} onSelectBatch={(batch) => handleNavigate({ page: Page.Batches, id: batch.id })} onCreateBatch={handleCreateBatch} />;
         case Page.Warehouse: return <WarehousePage warehouseItems={warehouseItems} masterItems={masterItems} locations={locations} categories={categories} onLoadItems={() => openForm(Page.Warehouse, 'load')} onUnloadItems={() => openForm(Page.Warehouse, 'unload')} onMoveItem={handleMoveItem} title={'Warehouse'} showLoadButton={true} />;
         case Page.WarehouseMovements: return <WarehouseMovementsPage movements={warehouseMovements} masterItems={masterItems} locations={locations} categories={categories} />;
-        case Page.Items: return <ItemsPage masterItems={masterItems} categories={categories} onNewItem={() => openForm(Page.Items, 'new')} onEditItem={(item) => openForm(Page.Items, 'edit', item.id)} onDeleteItem={handleDeleteMasterItem} />;
+        case Page.Items: return <ItemsPage masterItems={masterItems} categories={categories} suppliers={suppliers} onNewItem={() => openForm(Page.Items, 'new')} onEditItem={(item) => openForm(Page.Items, 'edit', item.id)} onDeleteItem={handleDeleteMasterItem} onSaveMultipleItems={handleSaveMultipleMasterItems} />;
         case Page.ProductionPlan: return <ProductionPlanPage recipes={recipes} masterItems={masterItems} warehouseItems={warehouseItems} suppliers={suppliers} batches={batches} />;
         case Page.Analysis: return <AnalysisPage batches={batches} recipes={recipes} masterItems={masterItems} categories={categories} warehouseItems={warehouseItems} />;
         case Page.QualityControl: return <QualityControlPage batches={batches} recipes={recipes} />;
@@ -510,11 +569,30 @@ const handleMoveItem = (details: { masterItemId: string; lotNumber: string; from
         case Page.Locations: return <LocationsPage locations={locations} onSaveLocation={handleSaveLocation} onDeleteLocation={handleDeleteLocation} />;
         case Page.ProductionCosts: return <ProductionCostsPage recipes={recipes} masterItems={masterItems} administrationSettings={adminSettings} onSaveAdministrationSettings={setAdminSettings} />;
         case Page.PriceList: return <PriceListPage recipes={recipes} masterItems={masterItems} administrationSettings={adminSettings} onSaveMultipleItems={(items) => { const newItems = [...masterItems]; items.forEach(i => { const index = newItems.findIndex(mi => mi.id === i.id); if (index !== -1) newItems[index] = i; }); setMasterItems(newItems); toast.success('Prices saved!'); }} />;
-        case Page.CustomerPriceLists: return <CustomerPriceListsPage recipes={recipes} masterItems={masterItems} customers={customers} administrationSettings={adminSettings} customerPriceLists={customerPriceLists} onSavePriceList={handleSavePriceList} />;
+        // FIX: Pass the 'categories' prop to the CustomerPriceListsPage component.
+        case Page.CustomerPriceLists: return <CustomerPriceListsPage recipes={recipes} masterItems={masterItems} customers={customers} administrationSettings={adminSettings} customerPriceLists={customerPriceLists} onSavePriceList={handleSavePriceList} categories={categories} />;
         case Page.Shipping: return <ShippingPage transportDocuments={transportDocuments} orders={orders} customers={customers} onNewDocument={(orderId) => toast.info('Creating transport documents is not yet implemented.')} onSelectDocument={(doc) => toast.info('Editing transport documents is not yet implemented.')} onDeleteDocument={(docId) => setTransportDocuments(prev => prev.filter(d => d.id !== docId))} />;
         case Page.Tools: return <ToolsPage />;
         case Page.Settings: return <SettingsPage categories={categories} onSaveCategory={handleSaveCategory} onDeleteCategory={handleDeleteCategory} batchNumberingSettings={batchNumberingSettings} onSaveBatchNumberingSettings={setBatchNumberingSettings} batches={batches} />;
-        default: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} onNavigate={handleNavigate} />;
+        case Page.FinishedGoodsWarehouse: {
+            const fgParentCat = categories.find(c => c.name === 'Finished Goods');
+            const fgCategoryIds = fgParentCat ? [fgParentCat.id, ...categories.filter(c => c.parentCategoryId === fgParentCat.id).map(c => c.id)] : [];
+            const finishedGoodsMasterItemIds = new Set(masterItems.filter(mi => fgCategoryIds.includes(mi.categoryId)).map(mi => mi.id));
+            const finishedGoodsItems = warehouseItems.filter(whi => finishedGoodsMasterItemIds.has(whi.masterItemId));
+            
+            return <WarehousePage
+                warehouseItems={finishedGoodsItems}
+                masterItems={masterItems}
+                locations={locations}
+                categories={categories}
+                onLoadItems={() => {}}
+                onUnloadItems={() => openForm(Page.Warehouse, 'unload')}
+                onMoveItem={handleMoveItem}
+                title={t('Finished Goods')}
+                showLoadButton={false}
+            />;
+        }
+        default: return <DashboardPage batches={batches} warehouseItems={warehouseItems} masterItems={masterItems} recipes={recipes} locations={locations} onNavigate={handleNavigate} />;
     }
   };
 

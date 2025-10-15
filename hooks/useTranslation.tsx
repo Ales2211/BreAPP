@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, ReactNode } from 'react';
 // Fix: Corrected import paths and renamed 'it' to 'itLocale'.
 import { en } from '../locales/en';
@@ -20,7 +21,9 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [language, setLanguage] = usePersistentState<Language>('brewflow_language', 'en');
 
   const t = (key: string): string => {
-    return translations[language][key as keyof typeof translations[Language]] || key;
+    // FIX: Corrected the incorrect type assertion which was causing a compile error.
+    // This now safely accesses translations by casting the language object.
+    return (translations[language] as Record<string, string>)[key] || key;
   };
 
   return (

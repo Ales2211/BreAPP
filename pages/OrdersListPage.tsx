@@ -104,9 +104,9 @@ const OrdersListPage: React.FC<OrdersListPageProps> = ({ orders, customers, onNe
                 message={`${t('Are you sure you want to delete order')} #${orderToDelete?.orderNumber}? ${t('This action cannot be undone.')}`}
             />
 
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 flex-shrink-0">
-                <h1 className="text-3xl font-bold text-color-text mb-4 md:mb-0">{t('Orders')}</h1>
-                <button onClick={onNewOrder} className="flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 flex-shrink-0">
+                <h1 className="text-3xl font-bold text-color-text">{t('Orders')}</h1>
+                <button onClick={onNewOrder} className="flex-shrink-0 flex items-center space-x-2 bg-color-accent hover:bg-orange-500 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
                     <PlusCircleIcon className="w-6 h-6" />
                     <span>{t('New Order')}</span>
                 </button>

@@ -50,13 +50,13 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selectedValue
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-color-background border border-color-border rounded-md py-2 px-3 text-color-text focus:outline-none focus:border-color-accent focus:ring-1 focus:ring-color-accent transition-colors flex justify-between items-center text-left"
+        className={`w-full bg-color-background border border-color-border py-2 px-3 text-color-text focus:outline-none focus:border-color-accent focus:ring-1 focus:ring-color-accent transition-colors flex justify-between items-center text-left ${isOpen ? 'rounded-t-md rounded-b-none' : 'rounded-md'}`}
       >
         <span className="truncate">{displayLabel()}</span>
         <ChevronDownIcon className={`w-5 h-5 transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="absolute z-20 w-full mt-1 bg-color-surface border border-color-border rounded-md shadow-lg max-h-60 overflow-y-auto top-full">
+        <div className="absolute z-20 w-full bg-color-surface border-x border-b border-color-border rounded-b-md shadow-lg max-h-60 overflow-y-auto top-full">
           <ul>
             {options.map(option => (
               <li key={option.value} className="px-3 py-2 hover:bg-color-background cursor-pointer text-sm">
